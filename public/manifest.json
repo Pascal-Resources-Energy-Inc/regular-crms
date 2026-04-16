@@ -1,0 +1,44 @@
+{
+    "name": "SPARK",
+    "short_name": "GazLite",
+    "start_url": "./pwa-launcher.html",
+    "background_color": "#5DADE2",
+    "description": "GazLite Customer Relationship Management System",
+    "display": "fullscreen",
+    "theme_color": "#5DADE2",
+
+    "icons": [
+        {
+            "src": "/images/icons/logo_512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "/images/icons/splash_640x1136.png",
+            "sizes": "640x1136",
+            "type": "image/png"
+        },
+        {
+            "src": "/images/icons/logo_512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "form_factor": "wide"
+        }
+    ],
+
+    "screenshots": [
+        {
+            "src": "/images/icons/logo_512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "form_factor": "wide",
+            "label": "GazLite CRMS"
+        },
+        {
+            "src": "/images/icons/logo_512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "label": "GazLite CRMS"
+        }
+    ]
+}
