@@ -28,62 +28,62 @@
 <!-- Using Bootstrap classes for top controls -->
 <div class="top-controls mt-1 d-flex justify-content-between align-items-center p-3">
   <div class="dropdown">
-    <button class="category-dropdown" type="button" id="categoryDropdown">
-      <span id="selectedCategory">Select Customer</span>
-      <i class="bi bi-chevron-down"></i>
-    </button>
-    <ul class="dropdown-menu" id="categoryDropdownMenu">
-      <li class="dropdown-search-wrapper">
-        <input type="text" class="dropdown-search-input" id="customerSearchInput" placeholder="Type to search customer..." autocomplete="off">
-      </li>
-      <li class="dropdown-empty-state" id="dropdownEmptyState">
-        <div class="empty-state-content">
-          <i class="bi bi-search"></i>
-          <p>Start typing to search customers...</p>
-        </div>
-      </li>
-      <li class="dropdown-no-results hidden" id="dropdownNoResults">
-        <div class="empty-state-content">
-          <i class="bi bi-exclamation-circle"></i>
-          <p>No customers found</p>
-        </div>
-      </li>
-      <li class="customer-list-wrapper">
-        <a class="dropdown-item category-filter hidden" href="#" data-customer-id="">
-          -- Clear Selection --
-        </a>
-        @foreach($customers as $customer)
-          @php
-          $fullName = $customer->name;
-          $parts = explode(' ', $fullName);
-          $lastName = array_pop($parts);
-          $masked = str_repeat('*', strlen(implode(' ', $parts))) . ' ' . $lastName;
-          
-          $serial = $customer->serial->serial_number ?? '';
-          $masked_serial = str_repeat('*', max(0, strlen($serial) - 5)) . substr($serial, -5);
-          
-          $number = $customer->number;
-          $masked_number = str_repeat('*', max(0, strlen($number) - 5)) . substr($number, -5);
-          @endphp
-          <a class="dropdown-item category-filter customer-option hidden" href="#" 
-            data-customer-id="{{ $customer->id }}"
-            data-name="{{ $masked }}"
-            data-serial="{{ $masked_serial }}"
-            data-number="{{ $masked_number }}"
-            data-full-name="{{ $fullName }}"
-            data-search="{{ strtolower($masked . ' ' . $masked_serial . ' ' . $masked_number) }}">
-            <div class="customer-info">
-              <div class="customer-name">{{ $masked }}</div>
-              <div class="customer-details">
-                <span class="customer-serial">Serial: {{ $masked_serial }}</span>
-                <span class="customer-number">Number: {{ $masked_number }}</span>
-              </div>
+  <button class="category-dropdown" type="button" id="categoryDropdown">
+    <span id="selectedCategory">Select Customer</span>
+    <i class="bi bi-chevron-down"></i>
+  </button>
+  <ul class="dropdown-menu" id="categoryDropdownMenu">
+    <li class="dropdown-search-wrapper">
+      <input type="text" class="dropdown-search-input" id="customerSearchInput" placeholder="Type to search customer..." autocomplete="off">
+    </li>
+    <li class="dropdown-empty-state" id="dropdownEmptyState">
+      <div class="empty-state-content">
+        <i class="bi bi-search"></i>
+        <p>Start typing to search customers...</p>
+      </div>
+    </li>
+    <li class="dropdown-no-results hidden" id="dropdownNoResults">
+      <div class="empty-state-content">
+        <i class="bi bi-exclamation-circle"></i>
+        <p>No customers found</p>
+      </div>
+    </li>
+    <li class="customer-list-wrapper">
+      <a class="dropdown-item category-filter hidden" href="#" data-customer-id="">
+        -- Clear Selection --
+      </a>
+      @foreach($customers as $customer)
+        @php
+        $fullName = $customer->name;
+        $parts = explode(' ', $fullName);
+        $lastName = array_pop($parts);
+        $masked = str_repeat('*', strlen(implode(' ', $parts))) . ' ' . $lastName;
+        
+        $serial = $customer->serial->serial_number ?? '';
+        $masked_serial = str_repeat('*', max(0, strlen($serial) - 5)) . substr($serial, -5);
+        
+        $number = $customer->number;
+        $masked_number = str_repeat('*', max(0, strlen($number) - 5)) . substr($number, -5);
+        @endphp
+        <a class="dropdown-item category-filter customer-option hidden" href="#" 
+          data-customer-id="{{ $customer->id }}"
+          data-name="{{ $masked }}"
+          data-serial="{{ $masked_serial }}"
+          data-number="{{ $masked_number }}"
+          data-full-name="{{ $fullName }}"
+          data-search="{{ strtolower($masked . ' ' . $masked_serial . ' ' . $masked_number) }}">
+          <div class="customer-info">
+            <div class="customer-name">{{ $masked }}</div>
+            <div class="customer-details">
+              <span class="customer-serial">Serial: {{ $masked_serial }}</span>
+              <span class="customer-number">Number: {{ $masked_number }}</span>
             </div>
-          </a>
-        @endforeach
-      </li>
-    </ul>
-  </div>
+          </div>
+        </a>
+      @endforeach
+    </li>
+  </ul>
+</div>
   <!-- Using Bootstrap flex utilities -->
   <div class="d-flex gap-3">
     <div class="nav-icon-container">

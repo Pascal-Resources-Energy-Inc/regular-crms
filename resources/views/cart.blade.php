@@ -8,8 +8,38 @@
       </button>
       <h1 class="page-title position-absolute start-50 translate-middle-x m-0">Confirm Order</h1>
     </div>
-    
-    <div class="client-section">
+    <div class="cart-section">
+        <div class="section-header">
+            <i class="bi bi-diagram-3-fill"></i> Transaction Type
+        </div>
+
+        <div class="payment-option">
+            <label class="d-flex align-items-center w-100">
+            <input type="radio" name="transaction_type" value="client_transaction" class="me-3" checked>
+            <div class="payment-icon d-flex align-items-center justify-content-center flex-shrink-0 me-3">
+                <i class="bi bi-person-check-fill"></i>
+            </div>
+            <div class="payment-details flex-grow-1">
+                <div class="payment-name">Client Transaction</div>
+                <div class="payment-desc">Regular customer order</div>
+            </div>
+            </label>
+        </div>
+
+        <div class="payment-option">
+            <label class="d-flex align-items-center w-100">
+            <input type="radio" name="transaction_type" value="ad_order" class="me-3">
+            <div class="payment-icon d-flex align-items-center justify-content-center flex-shrink-0 me-3" style="background:#6f42c1; color:white;">
+                <i class="bi bi-megaphone-fill"></i>
+            </div>
+            <div class="payment-details flex-grow-1">
+                <div class="payment-name">Order to AD</div>
+                <div class="payment-desc">Advertisement / assigned order</div>
+            </div>
+            </label>
+        </div>
+    </div>
+    <div id="client-transaction-section" class="client-section">
         <div class="client-content">
             <div class="assigned-ads-card d-flex align-items-center" onclick="openCustomerSelection()" style="cursor: pointer;">
                 <div class="ads-icon d-flex align-items-center justify-content-center flex-shrink-0">
@@ -18,9 +48,36 @@
                 <div class="client-info flex-grow-1">
                     <div class="client-label">Assigned Customer</div>
                     <div class="client-name" id="assigned-customer-name">Select a Customer</div>
-                    <div class="client-details" id="assigned-customer-details" style="font-size: 11px; color: #999; margin-top: 3px;"></div>
+                    <div class="client-details" id="assigned-customer-details"></div>
                 </div>
             </div>
+        </div>
+    </div>
+    <div id="ad-transaction-section" class="client-section" style="display:none;">
+        <div class="client-content">
+
+            <div class="assigned-ads-card d-flex align-items-center">
+                <div class="ads-icon d-flex align-items-center justify-content-center flex-shrink-0">
+                    <i class="bi bi-magic"></i>
+                </div>
+
+                <div class="client-info flex-grow-1">
+                    <div class="client-label">Auto Assigned Area Distributor</div>
+                    
+                    <div class="client-name" id="assigned-ad-name">
+                        Detecting AD...
+                    </div>
+
+                    <div class="client-details" id="assigned-ad-details"
+                        style="font-size:11px;color:#999;margin-top:3px;">
+                    </div>
+                </div>
+
+                <button class="btn btn-sm btn-outline-primary" onclick="openADSelectionManual()">
+                    Change
+                </button>
+            </div>
+
         </div>
     </div>
 
@@ -1659,6 +1716,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const deliveryMethod = localStorage.getItem('dealerDeliveryMethod') || 'delivery';
             const deliveryDate = localStorage.getItem('dealerDeliveryDate') || '';
             
+            const transactionTypeElement = document.querySelector('input[name="transaction_type"]:checked');
+            const transactionType = transactionTypeElement ? transactionTypeElement.value : 'client_transaction';
+            
             const orderData = {
                 items: dealerCartData,
                 customer: {
@@ -1667,14 +1727,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     serial: customerSerial,
                     number: customerNumber
                 },
+                transaction_type: transactionType, // ✅ ADD THIS
                 payment_method: paymentMethod,
                 subtotal: dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0),
                 total: dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0),
                 order_notes: document.getElementById('order-notes') ? document.getElementById('order-notes').value : '',
-                delivery_method: deliveryMethod,
-                delivery_date: deliveryDate,
-                delivery_type: deliveryMethod === 'pickup' ? 'Pick-up' : 'Delivery',
-                assigned_person: deliveryMethod === 'pickup' ? 'Customer' : (localStorage.getItem('dealerSelectedAds') || 'YULIVER BALBANERO'),
                 created_at: new Date().toISOString()
             };
 
@@ -1712,4 +1769,60 @@ document.addEventListener('DOMContentLoaded', function() {
     renderCartItems();
     updateOrderSummary();
 });
+</script>
+
+<script>
+window.areaDistributors = @json($areaDistributor);
+window.authUserCenter = @json($userCenter);
+window.matchedAD = @json($matchedAD);
+
+document.addEventListener('DOMContentLoaded', function () {
+    initTransactionSystem();
+});
+
+function initTransactionSystem() {
+    document.querySelectorAll('input[name="transaction_type"]').forEach(radio => {
+        radio.addEventListener('change', handleTransactionTypeChange);
+    });
+
+    handleTransactionTypeChange();
+}
+
+function handleTransactionTypeChange() {
+    const selected = document.querySelector('input[name="transaction_type"]:checked')?.value;
+
+    const client = document.getElementById('client-transaction-section');
+    const ad = document.getElementById('ad-transaction-section');
+
+    if (!client || !ad) return;
+
+    if (selected === 'client_transaction') {
+        client.style.display = 'block';
+        ad.style.display = 'none';
+        return;
+    }
+
+    client.style.display = 'none';
+    ad.style.display = 'block';
+
+    openADSelectionManual();
+}
+
+function openADSelectionManual() {
+    const adName = document.getElementById('assigned-ad-name');
+    const adDetails = document.getElementById('assigned-ad-details');
+
+    if (!adName || !adDetails) return;
+
+    // ✅ PRIORITY: backend matched AD
+    if (window.matchedAD) {
+        adName.textContent = window.matchedAD.name;
+        adDetails.textContent = `Area: ${window.authUserCenter}`;
+        return;
+    }
+
+    // fallback
+    adName.textContent = "No AD Found";
+    adDetails.textContent = "No distributor for your area";
+}
 </script>

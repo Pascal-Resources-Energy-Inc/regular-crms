@@ -1,0 +1,14 @@
+<?php
+
+namespace App;
+
+use Illuminate\Database\Eloquent\Model;
+
+class AreaDistributor extends Model
+{
+    //
+    public function areas()
+    {
+        return $this->hasMany(AreaAd::class, 'ad_id');
+    }
+}
