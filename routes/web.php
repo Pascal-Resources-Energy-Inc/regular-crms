@@ -18,6 +18,12 @@ Route::post('/notifications/{id}/mark-viewed', 'NotificationController@markAsVie
 Route::post('/notifications/mark-all-read', 'NotificationController@markAllAsRead')->name('notifications.markAllRead');
 Route::get('/notifications/{id}', 'NotificationController@show')->name('notifications.show');
 Route::get('voucher', 'VoucherController@index')->name('voucher');
+// Route::post('/ad-orders/{id}/complete', 'HomeController@markCompleted')
+//     ->name('ad.orders.complete');
+Route::post('/ad-orders/{id}/complete', ['uses' => 'HomeController@markCompleted'
+]);
+Route::post('/ad-orders/{id}/cancel', ['uses' => 'HomeController@cancelPendingOrder'
+]);
 
 Route::get('/points-history', 'PointsHistoryController@index')->name('points.history');
 
@@ -32,6 +38,7 @@ Route::get('user-profile','UserController@view');
 
 Route::get('history','HistoryController@index');
 Route::get('account','AccountController@index');
+Route::patch('account','AccountController@update')->name('account.update');
 
 Route::get('/storelocation', 'HomeController@storelocation')->name('storelocation');
 Route::get('/api/locations-map', 'HomeController@getLocationsForMap')->name('locations.map');
@@ -40,13 +47,22 @@ Route::get('/home/monthly-data', 'HomeController@getMonthlyDataAjax')->name('hom
 Route::get('/home/chart-data', 'HomeController@getChartDataAjax')->name('home.chart-data');
 
 Route::get('/products', 'ProductController@index')->name('products.index');
+Route::get('/products/stocks', 'ProductController@stockSummary')->name('products.stocks');
+Route::get('/stock-inventory', 'ProductController@dealerStockInventory')->name('dealer.stock.inventory');
+Route::get('/stock-inventory/{product}/transactions', 'ProductController@dealerStockTransactions')->name('dealer.stock.transactions');
 
 Route::get('/about', 'HomeController@about')->name('about');
 
 Route::get('/cart', 'CartController@index')->name('cart');
 Route::get('/place_order', 'TransactionController@index')->name('place_order');
-Route::post('/transactions/store', 'TransactionController@store')->name('transactions.store');
+// Route::post('/transactions/store', 'TransactionController@store')->name('transactions.store');
 Route::get('get-user/{id}', 'CustomerController@getUser');
+
+// Client transactions
+Route::post('/transactions/store', 'TransactionController@store')->name('transactions.store');
+
+// AD transactions
+Route::post('/ad-transactions/store', 'TransactionController@adStore')->name('ad.transactions.store');
 
 
 Route::get('/transactions','TransactionController@index')->name('transactions');
@@ -84,3 +100,6 @@ Route::get('/api/get-items', 'ItemController@getItems');
 Route::post('/api/transactions/store', 'TransactionController@storeApi');
 
 Route::get('/api/test-password-exists', 'UserController@testPasswordExists');
+
+
+

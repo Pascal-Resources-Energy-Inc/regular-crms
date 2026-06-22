@@ -1114,204 +1114,204 @@
     </style>
 
     <script>
-window.addEventListener('online', () => {
-    console.log('🌐 You are online');
-    document.body.classList.remove('offline-mode');
-    
-    if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ 
-            type: 'RESET_OFFLINE_STATE' 
-        });
-    }
-    
-    showOnlineNotification();
-});
-
-window.addEventListener('offline', () => {
-    console.log('📵 You are offline');
-    document.body.classList.add('offline-mode');
-    showOfflineChoiceDialog();
-});
-
-function showOfflineChoiceDialog() {
-    Swal.fire({
-        icon: 'warning',
-        title: 'Connection Lost',
-        html: `
-            <p style="font-size: 16px; margin-bottom: 20px;">
-                You have lost your internet connection.
-            </p>
-            <p style="font-size: 14px; color: #666;">
-                Choose an option to continue:
-            </p>
-        `,
-        showDenyButton: true,
-        showCancelButton: false,
-        confirmButtonText: '<i class="fas fa-sync-alt"></i> Retry Connection',
-        denyButtonText: '<i class="fas fa-wifi-slash"></i> Go Offline',
-        confirmButtonColor: '#5DADE2',
-        denyButtonColor: '#95a5a6',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        customClass: {
-        popup: 'swal-top-margin'
-    }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            retryConnection();
-        } else if (result.isDenied) {
-            redirectToOfflineMode();
-        }
-    });
-}
-
-function retryConnection() {
-    Swal.fire({
-        title: 'Checking Connection...',
-        html: 'Please wait while we verify your internet connection.',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        customClass: {
-            popup: 'swal-top-margin'
-        },
-        didOpen: () => {
-            Swal.showLoading();
-        }
-    });
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    Promise.all([
-        fetch('https://www.google.com/generate_204', {
-            method: 'HEAD',
-            mode: 'no-cors',
-            cache: 'no-store',
-            signal: controller.signal
-        }),
-        fetch('https://1.1.1.1/cdn-cgi/trace', {
-            method: 'GET',
-            cache: 'no-store',
-            signal: controller.signal
-        })
-    ])
-        .then(responses => {
-            clearTimeout(timeoutId);
-            
-            const currentTime = new Date().getTime();
-            const connectionValid = responses.some(response => {
-                return response && response.ok;
-            });
-
-            if (connectionValid && navigator.onLine) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Connected!',
-                    text: 'Your internet connection has been restored.',
-                    timer: 2000,
-                    showConfirmButton: false
-                }).then(() => {
-                    window.location.reload();
-                });
-            } else {
-                throw new Error('No valid connection');
-            }
-        })
-        .catch(error => {
-            clearTimeout(timeoutId);
-            console.log('Connection check failed:', error.message);
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'Connection Failed',
-                html: `
-                    <p style="font-size: 16px; margin-bottom: 15px;">
-                        Unable to establish a connection.
-                    </p>
-                    <p style="font-size: 14px; color: #666;">
-                        ${error.name === 'AbortError' ? 'Connection timeout.' : 'No internet access detected.'}<br>
-                        Redirecting to offline mode...
-                    </p>
-                `,
-                timer: 3000,
-                timerProgressBar: true,
-                showConfirmButton: false,
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            }).then(() => {
-                redirectToOfflineMode();
-            });
-        });
-}
-
-function redirectToOfflineMode() {
-    const getBasePath = () => {
-        const path = window.location.pathname;
-        if (path.includes('/crms/public')) {
-            return '/crms/public';
-        }
-        return '';
-    };
-    
-    const offlinePath = `${getBasePath()}/offline/login.html`;
-    
-    Swal.fire({
-        icon: 'info',
-        title: 'Switching to Offline Mode',
-        html: 'Redirecting to offline mode...<br><small>Limited features available</small>',
-        timer: 2000,
-        timerProgressBar: true,
-        showConfirmButton: false,
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
-    }).then(() => {
-        window.location.href = offlinePath;
-    });
-}
-
-function showOnlineNotification() {
-    const Toast = Swal.mixin({
-        toast: true,
-        position: 'top-end',
-        showConfirmButton: false,
-        timer: 3000,
-        timerProgressBar: true
-    });
-
-    Toast.fire({
-        icon: 'success',
-        title: 'You are back online!'
-    });
-}
-
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', event => {
-        const { type } = event.data;
+    window.addEventListener('online', () => {
+        console.log('🌐 You are online');
+        document.body.classList.remove('offline-mode');
         
-        switch(type) {
-            case 'OFFLINE_CHOICE_DIALOG':
-                showOfflineChoiceDialog();
-                break;
-                
-            case 'ONLINE_STATUS':
-                if (event.data.status === 'online') {
-                    showOnlineNotification();
-                }
-                break;
+        if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ 
+                type: 'RESET_OFFLINE_STATE' 
+            });
         }
+        
+        showOnlineNotification();
     });
-}
 
-if (!navigator.onLine) {
-    document.body.classList.add('offline-mode');
-    setTimeout(() => {
+    window.addEventListener('offline', () => {
+        console.log('📵 You are offline');
+        document.body.classList.add('offline-mode');
         showOfflineChoiceDialog();
-    }, 500);
-}
+    });
+
+    function showOfflineChoiceDialog() {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Connection Lost',
+            html: `
+                <p style="font-size: 16px; margin-bottom: 20px;">
+                    You have lost your internet connection.
+                </p>
+                <p style="font-size: 14px; color: #666;">
+                    Choose an option to continue:
+                </p>
+            `,
+            showDenyButton: true,
+            showCancelButton: false,
+            confirmButtonText: '<i class="fas fa-sync-alt"></i> Retry Connection',
+            denyButtonText: '<i class="fas fa-wifi-slash"></i> Go Offline',
+            confirmButtonColor: '#5DADE2',
+            denyButtonColor: '#95a5a6',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            customClass: {
+            popup: 'swal-top-margin'
+        }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                retryConnection();
+            } else if (result.isDenied) {
+                redirectToOfflineMode();
+            }
+        });
+    }
+
+    function retryConnection() {
+        Swal.fire({
+            title: 'Checking Connection...',
+            html: 'Please wait while we verify your internet connection.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            customClass: {
+                popup: 'swal-top-margin'
+            },
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        Promise.all([
+            fetch('https://www.google.com/generate_204', {
+                method: 'HEAD',
+                mode: 'no-cors',
+                cache: 'no-store',
+                signal: controller.signal
+            }),
+            fetch('https://1.1.1.1/cdn-cgi/trace', {
+                method: 'GET',
+                cache: 'no-store',
+                signal: controller.signal
+            })
+        ])
+            .then(responses => {
+                clearTimeout(timeoutId);
+                
+                const currentTime = new Date().getTime();
+                const connectionValid = responses.some(response => {
+                    return response && response.ok;
+                });
+
+                if (connectionValid && navigator.onLine) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Connected!',
+                        text: 'Your internet connection has been restored.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error('No valid connection');
+                }
+            })
+            .catch(error => {
+                clearTimeout(timeoutId);
+                console.log('Connection check failed:', error.message);
+                
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Connection Failed',
+                    html: `
+                        <p style="font-size: 16px; margin-bottom: 15px;">
+                            Unable to establish a connection.
+                        </p>
+                        <p style="font-size: 14px; color: #666;">
+                            ${error.name === 'AbortError' ? 'Connection timeout.' : 'No internet access detected.'}<br>
+                            Redirecting to offline mode...
+                        </p>
+                    `,
+                    timer: 3000,
+                    timerProgressBar: true,
+                    showConfirmButton: false,
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                }).then(() => {
+                    redirectToOfflineMode();
+                });
+            });
+    }
+
+    function redirectToOfflineMode() {
+        const getBasePath = () => {
+            const path = window.location.pathname;
+            if (path.includes('/crms/public')) {
+                return '/crms/public';
+            }
+            return '';
+        };
+        
+        const offlinePath = `${getBasePath()}/offline/login.html`;
+        
+        Swal.fire({
+            icon: 'info',
+            title: 'Switching to Offline Mode',
+            html: 'Redirecting to offline mode...<br><small>Limited features available</small>',
+            timer: 2000,
+            timerProgressBar: true,
+            showConfirmButton: false,
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        }).then(() => {
+            window.location.href = offlinePath;
+        });
+    }
+
+    function showOnlineNotification() {
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true
+        });
+
+        Toast.fire({
+            icon: 'success',
+            title: 'You are back online!'
+        });
+    }
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', event => {
+            const { type } = event.data;
+            
+            switch(type) {
+                case 'OFFLINE_CHOICE_DIALOG':
+                    showOfflineChoiceDialog();
+                    break;
+                    
+                case 'ONLINE_STATUS':
+                    if (event.data.status === 'online') {
+                        showOnlineNotification();
+                    }
+                    break;
+            }
+        });
+    }
+
+    if (!navigator.onLine) {
+        document.body.classList.add('offline-mode');
+        setTimeout(() => {
+            showOfflineChoiceDialog();
+        }, 500);
+    }
 </script>
 </head>
 <body>
@@ -1489,6 +1489,7 @@ if (!navigator.onLine) {
   
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
 
     <script>

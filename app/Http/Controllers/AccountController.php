@@ -8,52 +8,119 @@ use App\Transaction;
 use App\RedeemedHistory;
 use App\TransactionDetail;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class AccountController extends Controller
 {
-    public function index() {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
 
-        if (auth()->user()->role == "Dealer") {
-            $profile = Dealer::where('user_id', auth()->user()->id)->first();
-            $dealer = Dealer::with('sales')->where('user_id', auth()->user()->id)->first();
-            $transactions_details = TransactionDetail::where('dealer_id', auth()->user()->id)
+    public function index()
+    {
+        $user = auth()->user();
+        $profile = null;
+        $transactions_details = collect();
+        $availablePoints = 0;
+
+        if ($user->role == "Dealer") {
+            $profile = Dealer::with('sales')->where('user_id', $user->id)->first();
+            $transactions_details = TransactionDetail::where('dealer_id', $user->id)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->where('status', 'Completed');
+                })
                 ->orderBy('id', 'desc')
                 ->get();
 
-            $total_sales = TransactionDetail::where('dealer_id', auth()->user()->id)->sum('price');
-            $total_transactions = TransactionDetail::where('dealer_id', auth()->user()->id)->count();
-
-            $totalEarnedPointsDealer = $dealer->sales->sum('points_dealer');
-            $redeemedPointsDealer = abs(RedeemedHistory::where('user_id', auth()->user()->id)->sum('points_amount'));
-            $dealerAvailablePoints = $totalEarnedPointsDealer - $redeemedPointsDealer;
-
+            if ($profile) {
+                $totalEarnedPoints = $transactions_details->sum('points_dealer');
+                $redeemedPoints = abs(RedeemedHistory::where('user_id', $user->id)->sum('points_amount'));
+                $availablePoints = $totalEarnedPoints - $redeemedPoints;
+            }
         } else {
-            $profile = Dealer::where('user_id', auth()->user()->id)->first();
-            $customer = Client::where('user_id', auth()->user()->id)->first();
-            $transactions_details = TransactionDetail::where('client_id', $customer->id)
-                ->orderBy('id', 'desc')
-                ->get();
+            $profile = Client::with('transactions')->where('user_id', $user->id)->first();
 
-            $total_sales = TransactionDetail::where('client_id', $customer->id)->sum('price');
-            $total_transactions = TransactionDetail::where('client_id', $customer->id)->count();
+            if ($profile) {
+                $transactions_details = TransactionDetail::where('client_id', $profile->id)
+                    ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                        $query->where('status', 'Completed');
+                    })
+                    ->orderBy('id', 'desc')
+                    ->get();
 
-            $totalEarnedPointsCustomer = $customer->transactions->sum('points_client');
-            $redeemedPointsCustomer = abs(RedeemedHistory::where('user_id', auth()->user()->id)->sum('points_amount'));
-            $customerAvailablePoints = $totalEarnedPointsCustomer - $redeemedPointsCustomer;
+                $totalEarnedPoints = $transactions_details->sum('points_client');
+                $redeemedPoints = abs(RedeemedHistory::where('user_id', $user->id)->sum('points_amount'));
+                $availablePoints = $totalEarnedPoints - $redeemedPoints;
+            }
         }
 
-        // Optional: if you still want total sales of all
-       $total_sales = $transactions_details->sum(function ($transaction) {
+        $total_sales = $transactions_details->sum(function ($transaction) {
             return $transaction->price * $transaction->qty;
         });
-
+        $total_transactions = $transactions_details->count();
 
         return view('account', [
             'profile' => $profile,
-            'dealer_available_points' => $dealerAvailablePoints ?? null,
+            'available_points' => $availablePoints,
             'transactions_details' => $transactions_details,
             'total_sales' => $total_sales,
             'total_transactions' => $total_transactions,
         ]);
+    }
+
+    public function update(Request $request)
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'number' => ['nullable', 'string', 'max:255'],
+            'address' => ['nullable', 'string', 'max:1000'],
+            'facebook' => ['nullable', 'string', 'max:255'],
+            'store_name' => ['nullable', 'string', 'max:255'],
+            'store_type' => ['nullable', 'string', 'max:255'],
+            'current_password' => ['nullable', 'required_with:password', 'string'],
+            'password' => ['nullable', 'confirmed', 'min:8'],
+        ]);
+
+        if (!empty($validated['password']) && !Hash::check($validated['current_password'], $user->password)) {
+            return back()
+                ->withErrors(['current_password' => 'Current password is incorrect.'])
+                ->withInput();
+        }
+
+        $user->name = $validated['name'];
+        $user->email = $validated['email'];
+
+        if (!empty($validated['password'])) {
+            $user->password = Hash::make($validated['password']);
+        }
+
+        $user->save();
+
+        if ($user->role == "Dealer") {
+            $profile = Dealer::firstOrNew(['user_id' => $user->id]);
+            $profile->name = $validated['name'];
+            $profile->email_address = $validated['email'];
+            $profile->number = $validated['number'] ?? $profile->number;
+            $profile->address = $validated['address'] ?? $profile->address;
+            $profile->facebook = $validated['facebook'] ?? $profile->facebook;
+            $profile->store_name = $validated['store_name'] ?? $profile->store_name;
+            $profile->store_type = $validated['store_type'] ?? $profile->store_type;
+            $profile->save();
+        } else {
+            $profile = Client::firstOrNew(['user_id' => $user->id]);
+            $profile->name = $validated['name'];
+            $profile->email_address = $validated['email'];
+            $profile->number = $validated['number'] ?? $profile->number;
+            $profile->address = $validated['address'] ?? $profile->address;
+            $profile->save();
+        }
+
+        return back()->with('success', 'Account updated successfully.');
     }
 }

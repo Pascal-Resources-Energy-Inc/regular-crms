@@ -100,45 +100,87 @@
 
 <div class="content-area container-fluid" id="contentWrapper">
   <div class="row g-2">
-    @forelse($products as $index => $product)
-        <div class="col-6">
-          <div class="product-card-container bg-white rounded-3 shadow-sm border" id="container-{{ $product->id }}">
-            <div class="product-card p-3 text-center h-100">
-              <div class="product-image-container d-flex justify-content-center align-items-center mb-3 rounded-2">
-                <img src="{{ asset($product->item_image) }}" alt="{{ $product->item }}" id="productImage">
-              </div>
-              
-              <div class="product-info d-flex flex-column h-100">
-                <div class="product-name mb-2" id="productName">{{ $product->item }}</div>
-                
-                <div class="price-add-container d-flex justify-content-between align-items-center mt-auto">
-                  <div class="product-price fw-bold text-primary flex-grow-1 text-start">₱ {{ number_format($product->price, 2) }}</div>
-                  <div class="add-to-cart">
-                    @if(stripos($product->product_name, 'stove') !== false)
-                      <button class="add-btn btn btn-primary rounded-circle p-0 d-flex justify-content-center align-items-center" 
-                              data-id="{{ $product->id }}"
-                              data-container="container-{{ $product->id }}" 
-                              data-price="{{ $product->price }}" 
-                              data-name="{{ $product->product_name }}" 
-                              data-image="{{ $product->item_image }}">
-                        <i class="bi bi-plus"></i>
-                      </button>
-                    @else
-                      <button class="add-btn btn btn-primary rounded-circle p-0 d-flex justify-content-center align-items-center" 
-                            data-id="{{ $product->id }}"
-                            data-price="{{ $product->price }}" 
-                            data-name="{{ $product->item }}" 
-                            data-image="{{ $product->item_image }}">
-                      <i class="bi bi-plus"></i>
-                    </button>
-                    @endif
-                  </div>
+    @forelse($products as $product)
+      @php
+        $dealerStock = (int) ($dealerStockByProduct[$product->id] ?? 0);
+        $productPrice = $product->price ?? 0;
+        $hasProductImage = !empty($product->product_image);
+        $productImageUrl = $hasProductImage
+            ? config('app.crms_admin_url') . '/public/uploads/products/' . $product->product_image
+            : null;
+      @endphp
+      <div class="col-xl-4 col-lg-4 col-md-6 col-sm-12">
+        <div class="product-card-container" id="container-{{ $product->id }}">
+          <div class="product-card h-100">
+            {{-- Product Image --}}
+            <div class="product-image-container">
+              @if($hasProductImage)
+                <img
+                  src="{{ $productImageUrl }}"
+                  onerror="this.classList.add('d-none'); this.nextElementSibling.classList.remove('d-none');"
+                  alt="{{ $product->product_name }}"
+                  class="product-image"
+                >
+                <div class="product-image-placeholder d-none" aria-label="No image available">
+                  <span class="placeholder-icon"><i class="bi bi-image"></i></span>
+                  <span class="placeholder-title">No image</span>
                 </div>
-              </div>
+              @else
+                <div class="product-image-placeholder" aria-label="No image available">
+                  <span class="placeholder-icon"><i class="bi bi-image"></i></span>
+                  <span class="placeholder-title">No image</span>
+                </div>
+              @endif
+              <span class="product-availability {{ $dealerStock > 0 ? 'is-available' : 'is-empty' }}">
+                <i class="bi {{ $dealerStock > 0 ? 'bi-check2-circle' : 'bi-dash-circle' }}"></i>
+                {{ $dealerStock > 0 ? 'Available' : 'Out of stock' }}
+              </span>
+            </div>
+            {{-- Product Info --}}
+            <div class="product-info">
+
+                <div class="product-name">
+                    <label>{{ $product->product_name }}</label>
+                    <small>{{ $product->description }}</small>
+                </div>
+
+                <div class="stock-status-row">
+                    <span class="stock-pill {{ $dealerStock > 0 ? 'stock-pill-available' : 'stock-pill-empty' }}">
+                        <i class="bi bi-shop"></i>
+                        <span>Dealer</span>
+                        <strong>{{ $dealerStock > 0 ? $dealerStock : 0 }}</strong>
+                    </span>
+                </div>
+
+                <div class="price-add-container">
+
+                    <div class="price-block">
+                        <span class="price-label">Price</span>
+                        <div class="product-price">&#8369; {{ number_format($productPrice, 2) }}</div>
+                    </div>
+
+                    <div class="add-to-cart">
+                        <button
+                            type="button"
+                            class="add-btn btn btn-primary rounded-circle p-0 d-flex justify-content-center align-items-center"
+                            data-id="{{ $product->id }}"
+                            data-container="container-{{ $product->id }}"
+                            data-price="{{ $productPrice }}"
+                            data-name="{{ $product->product_name }}"
+                            data-image="{{ $productImageUrl ?? asset('images/no-image.png') }}"
+                            data-dealer-stock="{{ $dealerStock }}"
+                            aria-label="Add {{ $product->product_name }} to cart"
+                        >
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+
+                </div>
             </div>
           </div>
         </div>
-      @empty
+      </div>
+    @empty
       <div class="col-12">
         <div class="text-center py-5 text-muted">
           <i class="bi bi-box display-1 mb-3 d-block text-light"></i>
@@ -149,6 +191,7 @@
     @endforelse
   </div>
 </div>
+
 @endsection
 
 @section('css')
@@ -170,7 +213,7 @@
 .content-area {
   padding: 15px !important;
   text-align: left !important;
-  padding-bottom: 120px !important;
+  /* padding-bottom: 120px !important; */
 }
 
 .toast {
@@ -459,76 +502,6 @@
 .customer-option:hover .customer-details {
   color: #4A90E2;
 }
-
-.product-card-container {
-  transition: all 0.3s ease;
-}
-
-.product-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.product-image-container {
-  height: 150px;
-  background: #f8f9fa;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.product-image-container img {
-  max-height: 100%;
-  max-width: 100%;
-  object-fit: contain;
-}
-
-.product-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.product-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 8px;
-  line-height: 1.3;
-  min-height: 36px;
-}
-
-.price-add-container {
-  margin-top: auto;
-}
-
-.product-price {
-  font-size: 16px;
-  font-weight: 700;
-  color: #4A90E2;
-}
-
-.add-btn {
-  width: 32px;
-  height: 32px;
-  background: #4A90E2;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-}
-
-.add-btn:hover {
-  background: #186ed1;
-  transform: scale(1.05);
-}
-
 .add-btn.has-quantity {
   background: #ca1f1f;
 }
@@ -541,6 +514,272 @@
   font-size: 12px;
   font-weight: 700;
   color: #fff;
+}
+
+.product-card-container {
+  height: 100%;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.product-card {
+  position: relative;
+  height: 100%;
+  min-height: 390px;
+  padding: 10px;
+  border: 1px solid #e7edf4;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.product-card:hover {
+  border-color: #bdd7f2;
+  box-shadow: 0 14px 32px rgba(40, 91, 151, 0.14);
+  transform: translateY(-2px);
+}
+
+.product-image-container {
+  position: relative;
+  width: 100%;
+  height: 190px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #f7fafc 0%, #eef4f8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.product-image-container img,
+.product-image {
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.product-image-placeholder {
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+  border: 1px dashed #c8d4df;
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(241, 246, 250, 0.88)),
+    repeating-linear-gradient(135deg, rgba(83, 108, 133, 0.06) 0, rgba(83, 108, 133, 0.06) 8px, transparent 8px, transparent 16px);
+  color: #7a8794;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.placeholder-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #536b85;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.placeholder-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #677685;
+}
+
+.product-card:hover .product-image-container img,
+.product-card:hover .product-image {
+  transform: scale(1.04);
+}
+
+.product-availability {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.product-availability.is-available {
+  color: #177245;
+}
+
+.product-availability.is-empty {
+  color: #7a828c;
+}
+
+.product-info {
+  flex: 1;
+  padding: 12px 2px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product-name {
+  min-height: 66px;
+  margin-bottom: 0;
+  line-height: 1.35;
+}
+
+.product-name label {
+  display: -webkit-box;
+  margin-bottom: 4px;
+  color: #172033;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: left;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.product-name small {
+  display: -webkit-box;
+  color: #687386;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.stock-status-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+
+.stock-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stock-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-pill strong {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.stock-pill-available {
+  background: #ecf8f1;
+  color: #17693e;
+  border-color: #bee7ce;
+}
+
+.stock-pill-empty {
+  background: #f5f7f9;
+  color: #737d8c;
+  border-color: #e2e8ef;
+}
+
+.price-add-container {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.price-label {
+  display: block;
+  margin-bottom: 2px;
+  color: #7a8595;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.product-price {
+  color: #256fb4;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.add-btn {
+  width: 42px;
+  height: 42px;
+  background: #256fb4;
+  color: #fff;
+  border: none;
+  font-size: 16px;
+  box-shadow: 0 8px 18px rgba(37, 111, 180, 0.26);
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.add-btn:hover {
+  background: #195b98;
+  box-shadow: 0 10px 22px rgba(37, 111, 180, 0.32);
+  transform: scale(1.05);
+}
+
+.add-btn:disabled {
+  background: #98a2ad;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.add-btn:disabled:hover {
+  background: #98a2ad;
+  transform: none;
+}
+
+@media (max-width: 575.98px) {
+  .content-area {
+    padding: 10px !important;
+  }
+
+  .product-card {
+    min-height: 360px;
+  }
+
+  .product-image-container {
+    height: 170px;
+  }
 }
 
 /* Filter animations */
@@ -763,7 +1002,7 @@
   font-style: italic;
 }
 
-/* Color selection modal */
+/* Quantity modal */
 .color-selection-expansion {
   position: fixed;
   top: 50%;
@@ -845,62 +1084,6 @@
   color: #333;
 }
 
-.color-options { 
-  margin-bottom: 20px; 
-}
-
-.color-option-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.color-option-row:last-child { 
-  border-bottom: none; 
-}
-
-.color-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-  text-transform: capitalize;
-  min-width: 60px;
-}
-
-.color-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.color-quantity-input {
-  width: 60px;
-  padding: 6px 8px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  text-align: center;
-  font-size: 14px;
-  font-weight: 500;
-  outline: none;
-  transition: border-color 0.2s ease;
-}
-
-.color-quantity-input:focus { 
-  border-color: #4A90E2; 
-}
-
-.color-quantity-input::-webkit-outer-spin-button,
-.color-quantity-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.color-quantity-input[type=number] { 
-  -moz-appearance: textfield; 
-}
-
 .expansion-total {
   display: flex;
   justify-content: space-between;
@@ -922,29 +1105,6 @@
   color: #4A90E2;
 }
 
-.add-to-cart-expansion {
-  background: #4A90E2;
-  color: #fff;
-  border: none;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 100%;
-}
-
-.add-to-cart-expansion:hover { 
-  background: #186ed1; 
-}
-
-.add-to-cart-expansion:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-/* Quantity modal */
 .quantity-modal {
   position: fixed;
   top: 50%;
@@ -1148,112 +1308,6 @@
   box-shadow: 0 3px 6px rgba(74, 144, 226, 0.4);
 }
 
-/* Cart summary */
-.cart-summary-wrapper {
-  position: fixed;
-  bottom: 100px;
-  left: 15px;
-  right: 15px;
-  z-index: 1000;
-}
-
-.cart-summary-btn {
-  width: 100%;
-  background: linear-gradient(135deg, #4A90E2 0%, #357abd 100%);
-  color: #fff;
-  border: none;
-  padding: 16px 20px;
-  font-size: 15px;
-  font-weight: 600;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.2s ease;
-}
-
-.cart-summary-btn:active {
-  transform: scale(0.98);
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.6);
-}
-
-.cart-summary-btn i {
-  font-size: 18px;
-  margin-right: 6px;
-}
-
-/* Camera modal styles */
-.camera-modal-overlay {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  z-index: 2000;
-  align-items: center;
-  justify-content: center;
-}
-
-.camera-modal-content {
-  background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 400px;
-  max-height: 80vh;
-  overflow: hidden;
-}
-
-.camera-header {
-  padding: 20px;
-  border-bottom: 1px solid #e9ecef;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.camera-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
-}
-
-.camera-close {
-  background: none;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 50%;
-  color: #666;
-}
-
-.camera-container {
-  position: relative;
-  background: #000;
-}
-
-#cameraVideo {
-  width: 100%;
-  height: 300px;
-  object-fit: cover;
-}
-
-.camera-controls {
-  padding: 20px;
-  text-align: center;
-}
-
-.camera-status {
-  font-size: 14px;
-  color: #666;
-}
-
 .validation-modal {
   position: fixed;
   top: 50%;
@@ -1411,24 +1465,6 @@
     padding: 10px 12px !important;
   }
   
-  .product-name {
-    font-size: 12px;
-    min-height: 30px;
-  }
-  
-  .product-price { 
-    font-size: 15px; 
-  }
-  
-  .add-btn {
-    width: 28px;
-    height: 28px;
-  }
-  
-  .add-btn i { 
-    font-size: 12px; 
-  }
-  
   .color-selection-expansion,
   .quantity-modal {
     width: 95%;
@@ -1440,19 +1476,8 @@
     padding: 15px; 
   }
   
-  .color-quantity-input {
-    width: 50px;
-    padding: 5px 6px;
-    font-size: 13px;
-  }
-  
   .expansion-title { 
     font-size: 15px; 
-  }
-  
-  .color-label {
-    font-size: 13px;
-    min-width: 55px;
   }
   
   .search-container { 
@@ -1523,11 +1548,6 @@
 @endsection
 
 @section('js')
-
-<script>
-  
-</script>
-
 <script>
   document.addEventListener('DOMContentLoaded', function() {
   const searchContainer = document.getElementById('searchContainer');
@@ -1848,10 +1868,16 @@
 
   const buttonQuantities = new Map();
   const buttonToProduct = new Map();
-  const stoveColorQuantities = new Map();
 
   let currentExpansion = null;
-  const availableColors = ['yellow', 'blue', 'red', 'white', 'choco', 'green'];
+
+  function getDealerStock(button) {
+    return Math.max(0, parseInt(button.getAttribute('data-dealer-stock') || '0', 10) || 0);
+  }
+
+  function getSafeQuantity(quantity) {
+    return Math.max(0, Math.min(parseInt(quantity, 10) || 0, 999));
+  }
 
   function selectCustomerInDropdown(customerId) {
     const customerOption = document.querySelector(`.category-filter[data-customer-id="${customerId}"]`);
@@ -1886,43 +1912,32 @@
   addButtons.forEach((button, index) => {
     const productName = button.getAttribute('data-name');
     const productId = button.getAttribute('data-id');
+    const dealerStock = getDealerStock(button);
+
     buttonToProduct.set(button, {
       id: productId,
       name: productName,
       price: parseFloat(button.getAttribute('data-price')),
       image: button.getAttribute('data-image'),
-      containerId: button.getAttribute('data-container') || button.closest('[id^="container-"]')?.id || `container-${productId}`
+      containerId: button.getAttribute('data-container') || button.closest('[id^="container-"]')?.id,
+      dealerStock: dealerStock
     });
-    
+
     buttonQuantities.set(button, 0);
-    
-    if (productName.toLowerCase().includes('stove')) {
-      const colorMap = {};
-      availableColors.forEach(color => {
-        colorMap[color] = 0;
-      });
-      stoveColorQuantities.set(button, colorMap);
-    }
-    
     updateButtonDisplay(button, 0);
   });
 
   loadSavedCart();
-
   addButtons.forEach(button => {
-    button.addEventListener('click', function() {
+    button.addEventListener('click', function () {
       const productData = buttonToProduct.get(this);
       if (!productData) return;
 
-      const { name, price, image } = productData;
+      const { name, price, image, dealerStock } = productData;
 
       if (currentExpansion) closeExpansion();
 
-      if (name.toLowerCase().includes('stove')) {
-        showStoveModal(this, name, price, image);
-      } else {
-        showQuantityModal(this, name, price, image);
-      }
+      showQuantityModal(this, name, price, image, dealerStock);
 
       this.style.transform = 'scale(0.9)';
       setTimeout(() => {
@@ -2000,6 +2015,7 @@
         price: productData.price,
         quantity: newQuantity,
         image: productData.image,
+        dealerStock: productData.dealerStock,
         buttonId: buttonId
       });
     }
@@ -2007,36 +2023,51 @@
     updateCartAndTriggerHeaderUpdate();
   }
 
-  function updateStoveProductCart(productData, button, oldTotalQuantity, newTotalQuantity, colorQuantities) {
-    const buttonId = Array.from(addButtons).indexOf(button);
-    
-    cart.products = cart.products.filter(p => 
-      !(p.originalName === productData.name && p.buttonId === buttonId)
-    );
-    
-    cart.items -= oldTotalQuantity;
-    cart.amount -= (productData.price * oldTotalQuantity);
-    
-    Object.entries(colorQuantities).forEach(([color, quantity]) => {
-      if (quantity > 0) {
-        const productIdentifier = `${productData.name} (${color})`;
-        cart.products.push({
-          id: productData.id,
-          name: productIdentifier,
-          originalName: productData.name,
-          price: productData.price,
-          quantity: quantity,
-          image: productData.image,
-          color: color,
-          buttonId: buttonId
-        });
-        
-        cart.items += quantity;
-        cart.amount += (productData.price * quantity);
+  function sanitizeCartAgainstDealerStock() {
+    let adjusted = false;
+
+    cart.products = cart.products.reduce((products, product) => {
+      const button = Array.from(addButtons).find((candidate, index) => {
+        const data = buttonToProduct.get(candidate);
+
+        return data && (
+          data.id === String(product.id) ||
+          (product.buttonId !== undefined && product.buttonId === index) ||
+          data.name === product.name ||
+          data.name === product.originalName
+        );
+      });
+
+      if (!button) {
+        adjusted = true;
+        return products;
       }
-    });
-    
-    updateCartAndTriggerHeaderUpdate();
+
+      const productData = buttonToProduct.get(button);
+      const dealerStock = productData.dealerStock;
+      const safeQuantity = getSafeQuantity(product.quantity);
+
+      if (safeQuantity !== product.quantity) {
+        adjusted = true;
+      }
+
+      if (safeQuantity > 0) {
+        products.push({
+          ...product,
+          quantity: safeQuantity,
+          dealerStock: dealerStock
+        });
+      }
+
+      return products;
+    }, []);
+
+    cart.items = cart.products.reduce((sum, product) => sum + product.quantity, 0);
+    cart.amount = cart.products.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+
+    if (adjusted) {
+      displayToast('Cart updated because dealer stock changed.', 'error');
+    }
   }
 
   function loadSavedCart() {
@@ -2052,6 +2083,7 @@
         
         console.log('Found saved cart:', cart);
         
+        sanitizeCartAgainstDealerStock();
         updateButtonsFromSavedData();
         updateCartAndTriggerHeaderUpdate();
       }
@@ -2060,38 +2092,19 @@
       cart = { items: 0, amount: 0, products: [] };
     }
   }
-
   function updateButtonsFromSavedData() {
     addButtons.forEach((button, buttonIndex) => {
       const productData = buttonToProduct.get(button);
       if (!productData) return;
-      
-      const matchingProducts = cart.products.filter(product => {
-        return (product.originalName === productData.name || product.name.includes(productData.name)) 
-               && (product.buttonId === buttonIndex || !product.buttonId);
-      });
-      
+
+      const matchingProducts = cart.products.filter(product =>
+        (product.name === productData.name || product.originalName === productData.name) &&
+        (product.buttonId === buttonIndex || product.buttonId === undefined)
+      );
+
       if (matchingProducts.length > 0) {
-        let totalQuantity = 0;
-        
-        if (productData.name.toLowerCase().includes('stove')) {
-          const colorMap = {};
-          availableColors.forEach(color => colorMap[color] = 0);
-          
-          matchingProducts.forEach(product => {
-            if (product.color) {
-              colorMap[product.color] = (colorMap[product.color] || 0) + product.quantity;
-              totalQuantity += product.quantity;
-            } else {
-              totalQuantity += product.quantity;
-            }
-          });
-          
-          stoveColorQuantities.set(button, colorMap);
-        } else {
-          totalQuantity = matchingProducts.reduce((sum, product) => sum + product.quantity, 0);
-        }
-        
+        const totalQuantity = matchingProducts.reduce((sum, product) => sum + product.quantity, 0);
+
         buttonQuantities.set(button, totalQuantity);
         updateButtonDisplay(button, totalQuantity);
       }
@@ -2119,8 +2132,8 @@
 
   
 
-  function showQuantityModal(button, productName, price, productImage) {
-    const currentQuantity = buttonQuantities.get(button) || 0;
+  function showQuantityModal(button, productName, price, productImage, dealerStock) {
+    const currentQuantity = getSafeQuantity(buttonQuantities.get(button));
     
     const existingModal = document.querySelector('.quantity-modal');
     if (existingModal) existingModal.remove();
@@ -2148,6 +2161,9 @@
             <label class="quantity-label">Quantity:</label>
             <div class="current_cart_qty" style="font-size: 12px; color: #666; margin-bottom: 10px;">
                 Currently in cart: ${currentQuantity}
+            </div>
+            <div class="dealer_stock_qty" style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                Dealer stock: ${dealerStock}
             </div>
             <div class="quantity-controls">
               <button type="button" class="quantity-btn minus-btn" data-action="decrease">-</button>
@@ -2178,10 +2194,10 @@
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
     
-    setupQuantityModalEvents(modal, price, button);
+    setupQuantityModalEvents(modal, price, button, dealerStock);
   }
 
-  function setupQuantityModalEvents(modal, basePrice, button) {
+  function setupQuantityModalEvents(modal, basePrice, button, dealerStock) {
     const quantityInput = modal.querySelector('.quantity-input');
     const totalPrice = modal.querySelector('.expansion-total-price');
     const confirmBtn = modal.querySelector('.confirm-btn');
@@ -2191,7 +2207,8 @@
     const minusBtn = modal.querySelector('.minus-btn');
 
     function updateTotal() {
-      const quantity = parseInt(quantityInput.value) || 0;
+      const quantity = getSafeQuantity(quantityInput.value);
+      quantityInput.value = quantity;
       const total = basePrice * quantity;
       totalPrice.textContent = `₱ ${total.toFixed(2)}`;
     }
@@ -2210,7 +2227,8 @@
 
     quantityInput.addEventListener('input', () => {
       let value = parseInt(quantityInput.value) || 0;
-      value = Math.max(0, Math.min(value, 999));
+
+      value = getSafeQuantity(value);
       quantityInput.value = value;
       updateTotal();
     });
@@ -2242,156 +2260,6 @@
     closeBtn.addEventListener('click', closeExpansion);
   }
 
-  function showStoveModal(button, productName, price, productImage) {
-    const existingModal = document.querySelector('.dynamic-color-modal');
-    if (existingModal) existingModal.remove();
-
-    const colorOptionsHTML = availableColors.map(color => `
-      <div class="color-option-row">
-        <span class="color-label">${color.charAt(0).toUpperCase() + color.slice(1)}</span>
-        <div class="color-input-wrapper">
-          <span class="qty-stock text-mute">0</span>
-          <input type="number" class="color-quantity-input" data-color="${color}" min="0" value="0" max="999">
-        </div>
-      </div>
-    `).join('');
-
-    const modalHTML = `
-      <div class="color-selection-expansion dynamic-color-modal" data-product-name="${productName}" data-product-price="${price}" data-product-image="${productImage}">
-        <div class="expansion-header">
-          <h4 class="expansion-title">Choose Color & Quantity</h4>
-          <button class="close-expansion">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
-        
-        <div class="color-options">
-          ${colorOptionsHTML}
-        </div>
-        
-        <div class="expansion-total">
-          <span class="expansion-total-label">Total:</span>
-          <span class="expansion-total-price">₱ 0.00</span>
-        </div>
-        
-        <button class="add-to-cart-expansion" disabled>Confirm</button>
-      </div>
-    `;
-
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-    
-    const modal = document.querySelector('.dynamic-color-modal');
-    currentExpansion = modal;
-    
-    loadColorQuantitiesInModal(modal, button);
-    
-    expansionOverlay.classList.add('active');
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-    
-    setupStoveModalEvents(modal, price, button);
-  }
-
-  function loadColorQuantitiesInModal(modal, button) {
-    const colorQuantities = stoveColorQuantities.get(button) || {};
-    const quantityInputs = modal.querySelectorAll('.color-quantity-input');
-    
-    quantityInputs.forEach(input => {
-      const color = input.getAttribute('data-color');
-      const existingQuantity = colorQuantities[color] || 0;
-      input.value = existingQuantity;
-    });
-    
-    const price = parseFloat(modal.dataset.productPrice);
-    updateStoveModalTotal(modal, price);
-  }
-
-  function setupStoveModalEvents(modal, basePrice, button) {
-    const quantityInputs = modal.querySelectorAll('.color-quantity-input');
-    const addToCartBtn = modal.querySelector('.add-to-cart-expansion');
-    const closeBtn = modal.querySelector('.close-expansion');
-    
-    quantityInputs.forEach(input => {
-      input.addEventListener('input', function() {
-        if (parseInt(this.value) < 0) {
-          this.value = 0;
-        }
-        updateStoveModalTotal(modal, basePrice);
-      });
-
-      input.addEventListener('blur', function() {
-        if (this.value === '' || isNaN(parseInt(this.value))) {
-          this.value = 0;
-        }
-        updateStoveModalTotal(modal, basePrice);
-      });
-    });
-    
-    addToCartBtn.addEventListener('click', function() {
-      const productData = buttonToProduct.get(button);
-      if (!productData) return;
-      
-      saveColorQuantitiesFromModal(modal, button);
-      
-      const colorQuantities = stoveColorQuantities.get(button) || {};
-      const newTotalQuantity = Object.values(colorQuantities).reduce((sum, qty) => sum + qty, 0);
-      const oldTotalQuantity = buttonQuantities.get(button) || 0;
-      
-      buttonQuantities.set(button, newTotalQuantity);
-      
-      updateStoveProductCart(productData, button, oldTotalQuantity, newTotalQuantity, colorQuantities);
-      
-      updateButtonDisplay(button, newTotalQuantity);
-      
-      if (newTotalQuantity > 0) {
-        displayToast(`${newTotalQuantity} item(s) added to cart!`, 'success');
-      }
-      
-      closeExpansion();
-    });
-    
-    closeBtn.addEventListener('click', () => {
-      saveColorQuantitiesFromModal(modal, button);
-      
-      const colorQuantities = stoveColorQuantities.get(button) || {};
-      const totalQuantity = Object.values(colorQuantities).reduce((sum, qty) => sum + qty, 0);
-      buttonQuantities.set(button, totalQuantity);
-      updateButtonDisplay(button, totalQuantity);
-      
-      closeExpansion();
-    });
-  }
-
-  function saveColorQuantitiesFromModal(modal, button) {
-    const quantityInputs = modal.querySelectorAll('.color-quantity-input');
-    const colorQuantities = stoveColorQuantities.get(button) || {};
-    
-    quantityInputs.forEach(input => {
-      const color = input.getAttribute('data-color');
-      const quantity = parseInt(input.value) || 0;
-      colorQuantities[color] = quantity;
-    });
-    
-    stoveColorQuantities.set(button, colorQuantities);
-  }
-
-  function updateStoveModalTotal(modal, basePrice) {
-    const quantityInputs = modal.querySelectorAll('.color-quantity-input');
-    const totalPrice = modal.querySelector('.expansion-total-price');
-    const addToCartBtn = modal.querySelector('.add-to-cart-expansion');
-    
-    let totalQuantity = 0;
-    
-    quantityInputs.forEach(input => {
-      const quantity = parseInt(input.value) || 0;
-      totalQuantity += quantity;
-    });
-    
-    const total = basePrice * totalQuantity;
-    totalPrice.textContent = `₱ ${total.toFixed(2)}`;
-    addToCartBtn.disabled = totalQuantity === 0;
-  }
-
   function updateButtonDisplay(button, quantity) {
     const productData = buttonToProduct.get(button);
     const isStove = productData && productData.name.toLowerCase().includes('stove');
@@ -2415,7 +2283,6 @@
       
       setTimeout(() => {
         if (currentExpansion && (
-          currentExpansion.classList.contains('dynamic-color-modal') ||
           currentExpansion.classList.contains('quantity-modal')
         )) {
           currentExpansion.remove();
@@ -2528,13 +2395,8 @@ if (cartNavLink) {
   cartNavLink.addEventListener('click', function(e) {
     e.preventDefault();
     
-    const selectedCustomerId = localStorage.getItem('selectedCustomerId');
     const cartItems = parseInt(localStorage.getItem('dealerCartItems') || '0');
     const issues = [];
-
-    if (!selectedCustomerId || selectedCustomerId === '' || selectedCustomerId === 'null') {
-      issues.push('Please select a customer from the dropdown');
-    }
 
     if (cartItems === 0) {
       issues.push('Your cart is empty. Please add products to continue');

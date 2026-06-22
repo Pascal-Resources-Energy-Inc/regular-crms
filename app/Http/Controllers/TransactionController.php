@@ -2,67 +2,222 @@
 
 namespace App\Http\Controllers;
 use App\TransactionDetail;
+use App\OrderDetail;
+use App\AreaDistributor;
+use App\Mail\NewADOrderMail;
 use App\Item;
+use App\Product;
 use App\Client;
 use App\Dealer;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 use RealRashid\SweetAlert\Facades\Alert;
 class TransactionController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     $customers = Client::whereHas('serial')->get();
+    //     $items = Item::get();
+    //     $dealers = Dealer::get();
+    //     $place_order = [];
+    //     //  dd(auth()->user());
+    //     if(auth()->user()->role == "Admin")
+    //     {
+    //         $place_order = TransactionDetail::get();
+    //     }
+    //     elseif(auth()->user()->role == "Dealer")
+    //     {
+    //         $place_order = TransactionDetail::where('dealer_id',auth()->user()->id)->get();
+    //     }
+    //     return view('place_order',
+    //         array(
+    //             'place_order' => $place_order,
+    //             'items' => $items,
+    //             'customers' => $customers,
+    //             'dealers' => $dealers,
+    //         )
+    //     );
+    // }
     public function index(Request $request)
     {
+        $user = auth()->user();
+
         $customers = Client::whereHas('serial')->get();
         $items = Item::get();
         $dealers = Dealer::get();
-         $place_order = [];
-        //  dd(auth()->user());
-        if(auth()->user()->role == "Admin")
-        {
-            $place_order = TransactionDetail::get();
+        $transactions = [];
+
+        $areaDistributor = AreaDistributor::with('areas')->get();
+
+        if ($user->role == "Admin") {
+            $transactions = TransactionDetail::get();
+        } elseif ($user->role == "Dealer") {
+            $transactions = TransactionDetail::where('dealer_id', $user->id)->get();
         }
-        elseif(auth()->user()->role == "Dealer")
-        {
-            $place_order = TransactionDetail::where('dealer_id',auth()->user()->id)->get();
+
+        $center = optional($user->dealer)->area;
+
+        // ✅ GET ALL MATCHING ADs (NOT just first)
+        $matchedADs = collect();
+
+        if ($center) {
+            $matchedADs = AreaDistributor::whereHas('areas', function ($q) use ($center) {
+                $q->where('area_name', $center);
+            })->get();
         }
-        return view('place_order',
-            array(
-                'place_order' => $place_order,
-                'items' => $items,
-                'customers' => $customers,
-                'dealers' => $dealers,
-            )
-        );
+
+        // ✅ If no match → fallback to ALL
+        $availableADs = $matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor;
+
+        return view('place_order', [
+            'transactions' => $transactions,
+            'items' => $items,
+            'customers' => $customers,
+            'dealers' => $dealers,
+            'areaDistributor' => $areaDistributor,
+            'userCenter' => $center,
+            'matchedADs' => $matchedADs,     // ✅ collection
+            'availableADs' => $availableADs, // ✅ always usable
+        ]);
     }
 
     public function store(Request $request)
     {
         try {
             $validated = $request->validate([
-                'item_id' => 'required|exists:items,id',
+                // 'item_id' => 'required|exists:items,id',
+                'item_id' => 'required|exists:products,id',
                 'qty' => 'required|integer|min:1',
                 'customer_id' => 'required|exists:clients,id',
-                'payment_method' => 'nullable|string|in:cash,gcash,bank'
+                'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
+                'delivery_type' => 'nullable|string|in:pickup,delivery',
             ]);
 
-            $item = Item::findOrFail($request->item_id);
-            $client = Client::findOrFail($request->customer_id);
+            // $item = Item::findOrFail($request->item_id);
+            $item = Product::findOrFail($request->item_id);
+            $client = Client::with('user')->findOrFail($request->customer_id);
+            $dealerStock = $this->getDealerProductStock($item, auth()->id());
+            $transactionStatus = $dealerStock >= (int) $request->qty ? 'Completed' : 'Pending';
 
             $transaction = new TransactionDetail;
-            $transaction->item = $item->item;
+            $transaction->transaction_id = 'TRX-' . time() . '-' . rand(1000, 9999);
+            $transaction->item = $item->product_name;
             $transaction->points_dealer = $item->dealer_points * $request->qty;
             $transaction->points_client = $item->customer_points * $request->qty;
-            $transaction->item_description = $item->item_description;
+            $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
-            $transaction->price = $item->price;
+            $transaction->price = $this->getProductPriceForUser($item);
             $transaction->client_id = $request->customer_id;
             $transaction->client_address = $client->address ?? '';
             $transaction->date = date('Y-m-d');
             $transaction->dealer_id = auth()->user()->id;
             $transaction->created_by = auth()->user()->id;
-            $transaction->payment_method = $request->payment_method ?? 'cash';
+            $transaction->payment_method = $request->payment_method;
+            if (Schema::hasColumn('transaction_details', 'status')) {
+                $transaction->status = $transactionStatus;
+            }
             $transaction->save();
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $transactionStatus === 'Pending'
+                        ? 'Transaction saved as pending because dealer stock is not available yet'
+                        : 'Transaction saved successfully',
+                    'status' => $transactionStatus,
+                    'transaction_id' => $transaction->id
+                ], 200);
+            }
+
+            if ($transactionStatus === 'Pending') {
+                Alert::warning('Saved as Pending', 'Dealer has no stock for this product yet.')->persistent('Dismiss');
+            } else {
+                Alert::success('Successfully Save')->persistent('Dismiss');
+            }
+            return back();
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            
+            Alert::error('Validation failed')->persistent('Dismiss');
+            return back()->withErrors($e->errors())->withInput();
+
+        } catch (\Exception $e) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to save transaction: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            Alert::error('Failed to save transaction')->persistent('Dismiss');
+            return back();
+        }
+    }
+
+    public function adStore(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                // 'item_id' => 'required|exists:items,id',
+                'item_id' => 'required|exists:products,id',
+                'qty' => 'required|integer|min:1',
+                'area_distributor_id' => 'required|exists:area_distributors,id',
+                'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
+                'delivery_type' => 'nullable|string|in:pickup,delivery',
+                'delivery_fee' => 'nullable|numeric|min:0',
+            ]);
+
+            // $item = Item::findOrFail($request->item_id);
+            $item = Product::findOrFail($request->item_id);
+            // $ad = AreaDistributor::findOrFail($request->area_distributor_id);
+            $ad = AreaDistributor::with('user')->findOrFail($request->area_distributor_id);
+
+            $dealer = auth()->user();
+
+            $last = OrderDetail::latest('id')->first();
+            $nextNumber = $last ? $last->id + 1 : 1;
+            $transactionCode = 'PRORD-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
+            $transaction = new OrderDetail;
+            $transaction->item = $item->product_name;
+            $transaction->sku = $item->sku;
+            $transaction->transaction_id = $transactionCode;
+            $transaction->points_dealer = $item->dealer_points * $request->qty;
+            // $transaction->points_client = $item->customer_points * $request->qty;
+            $transaction->item_description = $item->description;
+            $transaction->qty = $request->qty;
+            $transaction->price = $this->getProductPriceForUser($item);
+
+            $transaction->ad_id = $request->area_distributor_id;
+            // $transaction->ad_id = $ad->user_id; // ✅ SAVE USER ID (NOT AD ID)
+            $transaction->ad_address = $ad->address ?? '';
+            $transaction->date = date('Y-m-d');
+            $transaction->dealer_id = $dealer->id;
+            $transaction->created_by = $dealer->id;
+            $transaction->payment_method = $request->payment_method;
+            $transaction->delivery_type = $request->delivery_type;
+            if (Schema::hasColumn('order_details', 'delivery_fee')) {
+                $transaction->delivery_fee = $request->delivery_fee ?? 0;
+            }
+            $transaction->status = 'Pending';
+            $transaction->save();
+
+            // ✅ SEND EMAIL TO AD
+            if ($ad->user && $ad->user->email) {
+                Mail::to($ad->user->email)->send(
+                    new NewADOrderMail($transaction, $ad, $item, $dealer)
+                );
+            }
 
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
@@ -366,5 +521,59 @@ class TransactionController extends Controller
                 'error' => 'Failed to fetch transactions: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    private function getProductPriceForUser(Product $product, $user = null)
+    {
+        $role = strtolower(str_replace([' ', '-'], '_', optional($user ?: auth()->user())->role ?? 'client'));
+        $priceColumn = [
+            'dealer' => 'dealer_price',
+            'mega_dealer' => 'mega_dealer_price',
+        ][$role] ?? 'price';
+
+        return $product->{$priceColumn} ?? $product->price ?? 0;
+    }
+
+    private function getDealerProductStock(Product $product, $dealerId)
+    {
+        $productNames = collect([$product->product_name, $product->description])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $productSkus = collect([$product->sku])->filter()->values()->all();
+
+        $completedOrderQty = 0;
+        if (Schema::hasTable('order_details')) {
+            $completedOrderQty = OrderDetail::where('dealer_id', $dealerId)
+                ->where('status', 'Completed')
+                ->where(function ($query) use ($productNames, $productSkus) {
+                    $query->whereIn('item', $productNames);
+
+                    if (Schema::hasColumn('order_details', 'sku') && !empty($productSkus)) {
+                        $query->orWhereIn('sku', $productSkus);
+                    }
+                })
+                ->sum('qty');
+        }
+
+        $soldQty = 0;
+        if (Schema::hasTable('transaction_details')) {
+            $soldQty = TransactionDetail::where('dealer_id', $dealerId)
+                ->where(function ($query) use ($productNames, $productSkus) {
+                    $query->whereIn('item', $productNames)
+                        ->orWhereIn('item_description', $productNames);
+
+                    if (Schema::hasColumn('transaction_details', 'sku') && !empty($productSkus)) {
+                        $query->orWhereIn('sku', $productSkus);
+                    }
+                })
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->where('status', 'Completed');
+                })
+                ->sum('qty');
+        }
+
+        return max(0, (int) $completedOrderQty - (int) $soldQty);
     }
 }

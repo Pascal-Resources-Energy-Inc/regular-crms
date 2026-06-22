@@ -11,7 +11,7 @@ class ItemController extends Controller
     {
         try {
             $items = DB::select('SELECT * FROM items');
-            
+            dd($items);
             $itemsArray = array_map(function($item) {
                 $itemData = (array) $item;
                 

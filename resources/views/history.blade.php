@@ -922,7 +922,7 @@
             <div class="detail-row">
             <span class="detail-label">Payment Method</span>
             <span class="detail-value">
-                <span class="payment-badge">${transaction.payment_method}</span>
+                <span class="payment-badge">${transaction.payment_method.toUpperCase()}</span>
             </span>
             </div>
         </div>

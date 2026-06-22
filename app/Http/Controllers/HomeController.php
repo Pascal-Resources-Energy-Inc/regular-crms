@@ -8,9 +8,13 @@ use Carbon\Carbon;
 use App\Client;
 use Illuminate\Support\Collection;
 use App\TransactionDetail;
+use App\OrderDetail;
 use Illuminate\Http\Request;
 use App\Product;
 use App\RedeemedHistory;
+use Illuminate\Support\Facades\Schema;
+use Mail;
+use App\Mail\OrderCompletedMail;
 
 class HomeController extends Controller
 {
@@ -53,11 +57,37 @@ class HomeController extends Controller
         $customers = Client::whereHas('transactions')->get();
         $transactions = Transaction::orderBy('id','desc')->get();
         $dealers = Dealer::get();
+        $client_transaction_feed = TransactionDetail::with('customer')
+            ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                $query->whereIn('status', ['Completed', 'Pending']);
+            })
+            ->orderBy('id', 'desc')
+            ->take(10)
+            ->get();
         $transactions_details = TransactionDetail::with('customer')
+        ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+            $query->where('status', 'Completed');
+        })
         ->orderBy('id', 'desc')
         ->take(10)
         ->get();
 
+        // $ad_transactions = OrderDetail::whereNotNull('ad_id')
+        //     // ->with(['ad', 'areas'])
+        //     ->with(['ad.areas']) 
+        //     ->latest()
+        //     ->take(20)
+        //     ->get();
+        $ad_transactions = OrderDetail::whereNotNull('ad_id')
+            ->with([
+                'ad.areas' => function ($query) {
+                    $query->whereNull('deleted_at');
+                }
+            ])
+            ->latest()
+            ->take(20)
+            ->get();
+        // dd($ad_transactions);
 
         if (auth()->user()->role === 'Dealer') {
             $userId = auth()->id();
@@ -65,8 +95,21 @@ class HomeController extends Controller
             $dealer = Dealer::with('sales')->where('user_id', $userId)->first();
 
             $transactions_raw = TransactionDetail::where('dealer_id', $userId)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->where('status', 'Completed');
+                })
                 ->latest()
                 ->get();
+            $client_feed_raw = TransactionDetail::where('dealer_id', $userId)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->whereIn('status', ['Completed', 'Pending']);
+                })
+                ->latest()
+                ->get();
+            $orders_raw = OrderDetail::where('dealer_id', $userId)
+                ->latest()
+                ->get();
+            // dd($userId); 
 
             $transactions_details = $transactions_raw->groupBy(fn($item) =>
                 "{$item->client_id}_{$item->created_at->format('Y-m-d H:i:s')}"
@@ -77,9 +120,65 @@ class HomeController extends Controller
                 return $first;
             })->values();
 
-            $total_sales = TransactionDetail::where('dealer_id', $userId)->sum('price');
+            $client_transaction_feed = $client_feed_raw->groupBy(fn($item) =>
+                "{$item->client_id}_{$item->created_at->format('Y-m-d H:i:s')}"
+            )->map(function ($group) {
+                $first = $group->first();
+                $first->qty = $group->sum('qty');
+                $first->transaction_count = $group->count();
+                $first->status = $group->contains(fn($item) => $item->status === 'Pending') ? 'Pending' : 'Completed';
+                return $first;
+            })->values();
 
-            $totalEarnedPointsDealer = $dealer->sales->sum('points_dealer');
+            // $ad_transactions = $orders_raw->groupBy(fn($item) =>
+            //     "{$item->client_id}_{$item->created_at->format('Y-m-d H:i:s')}"
+            // )->map(function ($group) {
+            //     $first = $group->first();
+            //     $first->qty = $group->sum('qty');
+            //     $first->transaction_count = $group->count();
+            //     return $first;
+            // })->values();
+            $ad_transactions = $orders_raw
+                ->groupBy(function ($item) {
+                    return $item->ad_id . '_' . $item->created_at->format('Y-m-d H:i:s');
+                })
+                ->map(function ($group) {
+
+                    $first = $group->first();
+
+                    return [
+                        'id' => $first->id, 
+                        'ad' => $first->ad,
+                        'created_at' => $first->created_at,
+                        'status' => $first->status,
+                        'ad_address' => $first->ad_address,
+                        'subtotal' => $group->sum(fn($i) => $i->price * $i->qty),
+                        'delivery_fee' => $group->max(fn($i) => (float) ($i->delivery_fee ?? 0)),
+                        'price_total' => $group->sum(fn($i) => $i->price * $i->qty)
+                            + $group->max(fn($i) => (float) ($i->delivery_fee ?? 0)),
+                        'payment_method' => $first->payment_method ?? 'cash',
+                        'delivery_type'  => $first->delivery_type ?? 'pickup',
+                        'items' => $group->map(function ($i) {
+                            return [
+                                'name' => $i->item,
+                                'qty' => $i->qty,
+                                'price' => $i->price,
+                                'total' => $i->price * $i->qty,
+                                'payment_method' => $i->payment_method ?? 'cash',
+                                'delivery_type' => $i->delivery_type ?? 'pickup',
+                            ];
+                        })->values()
+                    ];
+                })
+                ->values();
+            // dd($ad_transactions);
+            $total_sales = TransactionDetail::where('dealer_id', $userId)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->where('status', 'Completed');
+                })
+                ->sum('price');
+
+            $totalEarnedPointsDealer = $transactions_raw->sum('points_dealer');
             $redeemedPointsDealer = abs(RedeemedHistory::where('user_id', $userId)->sum('points_amount'));
             $dealerAvailablePoints = $totalEarnedPointsDealer - $redeemedPointsDealer;
         }
@@ -90,6 +189,15 @@ class HomeController extends Controller
             $customer = Client::with('transactions')->where('user_id', $userId)->first();
 
             $transactions_raw = TransactionDetail::where('client_id', $customer->id)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->where('status', 'Completed');
+                })
+                ->latest()
+                ->get();
+            $client_feed_raw = TransactionDetail::where('client_id', $customer->id)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->whereIn('status', ['Completed', 'Pending']);
+                })
                 ->latest()
                 ->get();
 
@@ -102,9 +210,23 @@ class HomeController extends Controller
                 return $first;
             })->values();
 
-            $total_sales = TransactionDetail::where('client_id', $customer->id)->sum('price');
+            $client_transaction_feed = $client_feed_raw->groupBy(fn($item) =>
+                "{$item->dealer_id}_{$item->created_at->format('Y-m-d H:i:s')}"
+            )->map(function ($group) {
+                $first = $group->first();
+                $first->qty = $group->sum('qty');
+                $first->transaction_count = $group->count();
+                $first->status = $group->contains(fn($item) => $item->status === 'Pending') ? 'Pending' : 'Completed';
+                return $first;
+            })->values();
 
-            $totalEarnedPointsCustomer = $customer->transactions->sum('points_client');
+            $total_sales = TransactionDetail::where('client_id', $customer->id)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->where('status', 'Completed');
+                })
+                ->sum('price');
+
+            $totalEarnedPointsCustomer = $transactions_raw->sum('points_client');
             $redeemedPointsCustomer = abs(RedeemedHistory::where('user_id', $userId)->sum('points_amount'));
             $customerAvailablePoints = $totalEarnedPointsCustomer - $redeemedPointsCustomer;
         }
@@ -152,6 +274,8 @@ class HomeController extends Controller
             array(
                 'transactions' => $transactions,
                 'transactions_details' => $transactions_details,
+                'client_transaction_feed' => $client_transaction_feed,
+                'ad_transactions' => $ad_transactions,
                 'dealers' => $dealers,
                 'categories' =>  $categories,
                 'qty' =>  $qty,
@@ -474,4 +598,273 @@ class HomeController extends Controller
 
         return $customers;
     }
+
+    // public function markCompleted($id)
+    // {
+    //     try {
+    //         $order = OrderDetail::find($id);
+
+    //         if (!$order) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => 'Order not found'
+    //             ], 404);
+    //         }
+
+    //         $order->status = 'Completed';
+    //         $order->save();
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Order marked as completed'
+    //         ]);
+
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+    public function markCompleted(Request $request, $id)
+    {
+        try {
+            $remarks = trim((string) $request->input('remarks', ''));
+
+            if ($remarks === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Remarks are required before marking the order as completed.'
+                ], 422);
+            }
+
+            if (strlen($remarks) > 500) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Remarks may not be greater than 500 characters.'
+                ], 422);
+            }
+
+            $order = OrderDetail::with(['ad', 'dealer', 'product'])->find($id);
+
+            if (!$order) {
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order not found'
+                ], 404);
+
+            }
+
+            // UPDATE STATUS
+            $order->status = 'Completed';
+            $order->completed_at = now();
+
+            if (Schema::hasColumn('order_details', 'remarks')) {
+                $order->remarks = $remarks;
+            }
+
+            $order->save();
+
+            $completedPendingCount = $this->completePendingClientTransactionsForOrder($order);
+
+            if (
+                !empty($order->ad) &&
+                !empty($order->ad->email_address)
+            ) {
+
+                Mail::to($order->ad->email_address)
+                    ->send(new OrderCompletedMail($order));
+
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $completedPendingCount > 0
+                    ? "Order marked as completed. {$completedPendingCount} pending client transaction(s) completed."
+                    : 'Order marked as completed.'
+            ]);
+
+        } catch (\Exception $e) {
+
+            \Log::error($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+
+        }
+    }
+
+    public function cancelPendingOrder(Request $request, $id)
+    {
+        try {
+            $remarks = trim((string) $request->input('remarks', ''));
+
+            if (strlen($remarks) > 500) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cancellation reason may not be greater than 500 characters.'
+                ], 422);
+            }
+
+            $order = OrderDetail::find($id);
+
+            if (!$order) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order not found.'
+                ], 404);
+            }
+
+            if ($order->status !== 'Pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending orders can be cancelled.'
+                ], 409);
+            }
+
+            $cancelExpiresAt = $order->created_at->copy()->addHour();
+
+            if (now()->greaterThan($cancelExpiresAt)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This order can only be cancelled within 1 hour after it was created.'
+                ], 409);
+            }
+
+            $cancelledCount = DB::transaction(function () use ($order, $remarks) {
+                $orders = OrderDetail::where('dealer_id', $order->dealer_id)
+                    ->where('ad_id', $order->ad_id)
+                    ->where('created_at', $order->created_at)
+                    ->where('status', 'Pending')
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($orders as $pendingOrder) {
+                    $pendingOrder->status = 'Cancelled';
+
+                    if (Schema::hasColumn('order_details', 'cancelled_at')) {
+                        $pendingOrder->cancelled_at = now();
+                    }
+
+                    if (Schema::hasColumn('order_details', 'remarks')) {
+                        $pendingOrder->remarks = $remarks !== ''
+                            ? 'Cancelled: ' . $remarks
+                            : 'Cancelled within 1 hour of order creation.';
+                    }
+
+                    $pendingOrder->save();
+                }
+
+                return $orders->count();
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => $cancelledCount > 1
+                    ? "{$cancelledCount} order item(s) cancelled successfully."
+                    : 'Order cancelled successfully.'
+            ]);
+
+        } catch (\Exception $e) {
+
+            \Log::error($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+
+        }
+    }
+
+    private function completePendingClientTransactionsForOrder(OrderDetail $order)
+    {
+        if (!Schema::hasColumn('transaction_details', 'status')) {
+            return 0;
+        }
+
+        $availableStock = $this->getAvailableDealerStockForOrderProduct($order);
+
+        if ($availableStock <= 0) {
+            return 0;
+        }
+
+        $productNames = collect([$order->item, $order->item_description])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $productSkus = collect([$order->sku])->filter()->values()->all();
+        $hasSku = Schema::hasColumn('transaction_details', 'sku');
+        $completedCount = 0;
+
+        $pendingTransactions = TransactionDetail::where('dealer_id', $order->dealer_id)
+            ->where('status', 'Pending')
+            ->where(function ($query) use ($productNames, $productSkus, $hasSku) {
+                $query->whereIn('item', $productNames)
+                    ->orWhereIn('item_description', $productNames);
+
+                if ($hasSku && !empty($productSkus)) {
+                    $query->orWhereIn('sku', $productSkus);
+                }
+            })
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($pendingTransactions as $transaction) {
+            $qty = (int) $transaction->qty;
+
+            if ($qty <= 0 || $qty > $availableStock) {
+                continue;
+            }
+
+            $transaction->status = 'Completed';
+            $transaction->save();
+
+            $availableStock -= $qty;
+            $completedCount++;
+        }
+
+        return $completedCount;
+    }
+
+    private function getAvailableDealerStockForOrderProduct(OrderDetail $order)
+    {
+        $productNames = collect([$order->item, $order->item_description])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $productSkus = collect([$order->sku])->filter()->values()->all();
+
+        $completedOrderQty = OrderDetail::where('dealer_id', $order->dealer_id)
+            ->where('status', 'Completed')
+            ->where(function ($query) use ($productNames, $productSkus) {
+                $query->whereIn('item', $productNames);
+
+                if (Schema::hasColumn('order_details', 'sku') && !empty($productSkus)) {
+                    $query->orWhereIn('sku', $productSkus);
+                }
+            })
+            ->sum('qty');
+
+        $completedSalesQty = TransactionDetail::where('dealer_id', $order->dealer_id)
+            ->where('status', 'Completed')
+            ->where(function ($query) use ($productNames, $productSkus) {
+                $query->whereIn('item', $productNames)
+                    ->orWhereIn('item_description', $productNames);
+
+                if (Schema::hasColumn('transaction_details', 'sku') && !empty($productSkus)) {
+                    $query->orWhereIn('sku', $productSkus);
+                }
+            })
+            ->sum('qty');
+
+        return max(0, (int) $completedOrderQty - (int) $completedSalesQty);
+    }
+
 }

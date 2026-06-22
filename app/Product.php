@@ -18,4 +18,30 @@ class Product extends Model
         'price' => 'decimal:2',
         'deposit' => 'decimal:2',
     ];
+
+    // public function adProduct()
+    // {
+    //     return $this->belongsTo(AreaDistributor::class, 'ad_user_id', 'user_id');
+    // }
+
+    // public function areas()
+    // {
+    //     return $this->hasMany(AreaAd::class, 'ad_id', 'id');
+    // }
+
+    public function adProduct()
+    {
+        return $this->belongsTo(AreaDistributor::class, 'ad_user_id', 'user_id');
+    }
+
+    public function areas()
+    {
+        return $this->hasMany(AreaAd::class, 'ad_user_id', 'ad_user_id');
+    }
+
+    // public function areas()
+    // {
+    //     return $this->hasMany(AreaAd::class, 'ad_id');
+    // }
+
 }

@@ -12,6 +12,7 @@ return [
     | any other location as required by the application or its packages.
     |
     */
+    'crms_admin_url' => env('CRMS_ADMIN_URL'),
 
     'name' => env('APP_NAME', 'Laravel'),
 
@@ -67,7 +68,8 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // 'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------
