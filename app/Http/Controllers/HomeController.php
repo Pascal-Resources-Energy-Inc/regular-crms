@@ -82,6 +82,8 @@ class HomeController extends Controller
             ->with([
                 'ad.areas' => function ($query) {
                     $query->whereNull('deleted_at');
+                }, 'charges' => function ($query) {
+                    $query->whereNull('deleted_at');
                 }
             ])
             ->latest()
@@ -145,6 +147,16 @@ class HomeController extends Controller
                 ->map(function ($group) {
 
                     $first = $group->first();
+                    
+                    // Get charges from the first item in the group
+                    $charges = $first->charges ? $first->charges->map(function ($charge) {
+                        return [
+                            'name' => $charge->name,
+                            'amount' => (float) $charge->amount
+                        ];
+                    })->toArray() : [];
+                    
+                    $otherChargesTotal = collect($charges)->sum('amount');
 
                     return [
                         'id' => $first->id, 
@@ -154,8 +166,11 @@ class HomeController extends Controller
                         'ad_address' => $first->ad_address,
                         'subtotal' => $group->sum(fn($i) => $i->price * $i->qty),
                         'delivery_fee' => $group->max(fn($i) => (float) ($i->delivery_fee ?? 0)),
+                        'other_charges' => $otherChargesTotal,
+                        'charges' => $charges,
                         'price_total' => $group->sum(fn($i) => $i->price * $i->qty)
-                            + $group->max(fn($i) => (float) ($i->delivery_fee ?? 0)),
+                            + $group->max(fn($i) => (float) ($i->delivery_fee ?? 0))
+                            + $otherChargesTotal,
                         'payment_method' => $first->payment_method ?? 'cash',
                         'delivery_type'  => $first->delivery_type ?? 'pickup',
                         'items' => $group->map(function ($i) {

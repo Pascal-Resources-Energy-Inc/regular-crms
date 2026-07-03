@@ -8,6 +8,8 @@ use App\Item;
 use App\Client;
 use App\Dealer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class CartController extends Controller
 {
@@ -110,7 +112,9 @@ class CartController extends Controller
         $dealerLat = $dealer->latitude;
         $dealerLng = $dealer->longitude;
 
-        $customers = Client::whereHas('serial')->get();
+        $customers = Client::with('serial')
+            ->where('dealer_id', $user->id)
+            ->get();
         $items = Item::get();
         $dealers = Dealer::get();
         $transactions = [];
@@ -167,6 +171,33 @@ class CartController extends Controller
             ? $matchedADs
             : $areaDistributor;
 
+        $otherCharges = collect();
+        foreach (['other_charges', 'charges'] as $chargeTable) {
+            if (Schema::hasTable($chargeTable)) {
+                $otherCharges = DB::table($chargeTable)
+                    ->when(Schema::hasColumn($chargeTable, 'deleted_at'), fn ($query) => $query->whereNull('deleted_at'))
+                    ->when(Schema::hasColumn($chargeTable, 'status'), function ($query) {
+                        $query->where(function ($statusQuery) {
+                            $statusQuery
+                                ->where('status', 'Active')
+                                ->orWhere('status', 'active')
+                                ->orWhere('status', 1)
+                                ->orWhere('status', '1');
+                        });
+                    })
+                    ->when(Schema::hasColumn($chargeTable, 'is_active'), fn ($query) => $query->where('is_active', 1))
+                    ->when(Schema::hasColumn($chargeTable, 'applies_to'), function ($query) {
+                        $query->where(function ($appliesQuery) {
+                            $appliesQuery
+                                ->where('applies_to', 'Dealer')
+                                ->orWhere('applies_to', 'dealer');
+                        });
+                    })
+                    ->get();
+                break;
+            }
+        }
+        
         return view('cart', [
             'transactions' => $transactions,
             'items' => $items,
@@ -176,6 +207,7 @@ class CartController extends Controller
             'userCenter' => $center,
             'matchedADs' => $matchedADs,
             'availableADs' => $availableADs,
+            'otherCharges' => $otherCharges,
         ]);
     }
 

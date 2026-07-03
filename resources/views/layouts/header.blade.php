@@ -1481,7 +1481,7 @@
 
     <!-- Include QR Scanner Modal -->
     @include('qr_scanner')
-
+    @include('sweetalert::alert')
     <!-- Hidden logout form -->
     <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
         {{ csrf_field() }}
@@ -1598,6 +1598,7 @@
             }
         });
     });
+
     </script>
 
     <!-- Cart Badge Update Script -->

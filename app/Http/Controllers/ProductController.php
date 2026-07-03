@@ -38,7 +38,9 @@ class ProductController extends Controller
         
         // $products = Product::with('adProduct.areas')->where('status', 'Activate')->orderBy('created_at', 'desc')->get();
         
-        $customers = Client::whereHas('serial')->get();
+        $customers = Client::with('serial')
+            ->where('dealer_id', auth()->id())
+            ->get();
         $items = Item::get();
         $dealers = Dealer::get();
         

@@ -651,7 +651,8 @@
                             @php
                                 $subtotal = $transaction['subtotal'] ?? $transaction['price_total'];
                                 $deliveryFee = (float) ($transaction['delivery_fee'] ?? 0);
-                                $grandTotal = $transaction['price_total'] ?? ($subtotal + $deliveryFee);
+                                $otherCharges = (float) ($transaction['other_charges'] ?? 0);
+                                $grandTotal = $transaction['price_total'] ?? ($subtotal + $deliveryFee + $otherCharges);
                                 $createdAt = $transaction['created_at'];
                                 $cancelExpiresAt = $createdAt->copy()->addHour();
                                 $minutesLeftToCancel = max(0, now()->diffInMinutes($cancelExpiresAt, false));
@@ -730,6 +731,13 @@
                                                     </span>
                                                 @endif
 
+                                                @if($otherCharges > 0)
+                                                    <span class="badge bg-light text-info border px-3 py-2 rounded-pill">
+                                                        <i class="bi bi-receipt-cutoff me-1"></i>
+                                                        AD Charges ₱{{ number_format($otherCharges, 2) }}
+                                                    </span>
+                                                @endif
+
                                             </div>
 
                                             <!-- STATUS -->
@@ -770,6 +778,27 @@
                                                     </span>
                                                     <span class="fw-semibold text-primary">+₱{{ number_format($deliveryFee, 2) }}</span>
                                                 </div>
+                                            @endif
+
+                                            @if($otherCharges > 0)
+                                                <div class="d-flex justify-content-between gap-3 small text-muted mt-1">
+                                                    <span>
+                                                        <i class="bi bi-receipt-cutoff text-info me-1"></i>AD Charges
+                                                    </span>
+                                                    <span class="fw-semibold text-info">+₱{{ number_format($otherCharges, 2) }}</span>
+                                                </div>
+                                                
+                                                <!-- Individual Charges -->
+                                                @if(!empty($transaction['charges']))
+                                                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                                                        @foreach($transaction['charges'] as $charge)
+                                                            <div class="d-flex justify-content-between gap-2 small" style="padding: 4px 0; font-size: 11px;">
+                                                                <span style="color: #64748b;">{{ $charge['name'] }}</span>
+                                                                <span style="color: #1d4ed8; font-weight: 600;">₱{{ number_format($charge['amount'], 2) }}</span>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
                                             @endif
 
                                             <div class="border-top mt-2 pt-2 d-flex justify-content-between gap-3 align-items-center">

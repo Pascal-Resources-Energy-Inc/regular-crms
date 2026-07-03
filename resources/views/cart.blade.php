@@ -99,6 +99,17 @@
                         </div>
                     </label>
                 </div>
+                <div id="delivery-fee-note" class="delivery-fee-note mt-3" style="display:none;">
+                    <div class="delivery-fee-icon">
+                        <i class="bi bi-info-circle-fill"></i>
+                    </div>
+                    <div>
+                        <div class="delivery-fee-title">Delivery fee may apply</div>
+                        <div class="delivery-fee-text">
+                            The delivery fee is based on your location and the assigned Area Distributor.
+                        </div>
+                    </div>
+                </div>
                 <!-- PICKUP ADDRESS CARD -->
                 {{-- <div id="pickup-address-card" class="mt-3">
                     <div class="pickup-address-card">
@@ -149,8 +160,7 @@
                                 $lastName = array_pop($parts);
                                 $masked = str_repeat('*', strlen(implode(' ', $parts))) . ' ' . $lastName;
                                 
-                                $serial = $customer->serial->serial_number ?? '';
-                                $masked_serial = str_repeat('*', max(0, strlen($serial) - 5)) . substr($serial, -5);
+                               
                                 
                                 $number = $customer->number;
                                 $masked_number = str_repeat('*', max(0, strlen($number) - 5)) . substr($number, -5);
@@ -158,9 +168,7 @@
                             <option value="{{ $customer->id }}" 
                                 data-name="{{ $masked }}" {{-- DISPLAY --}}
                                 data-full-name="{{ $fullName }}" {{-- REAL --}}
-                                data-serial="{{ $serial }}" {{-- REAL --}}
                                 data-number="{{ $number }}" {{-- REAL --}}
-                                data-masked-serial="{{ $masked_serial }}" {{-- DISPLAY --}}
                                 data-masked-number="{{ $masked_number }}" {{-- DISPLAY --}}>
                                 {{ $customer->name }}
                             </option>
@@ -269,6 +277,17 @@
       <div class="summary-row d-flex justify-content-between align-items-center">
         <span class="summary-label">Discount:</span>
         <span class="summary-value" id="discount">₱ 0.00</span>
+      </div>
+      <div id="ad-other-charge-row" class="summary-row ad-other-charges-row d-flex justify-content-between align-items-start" style="display: none;">
+        <span class="summary-label">
+          <span class="ad-charges-title">
+            <i class="bi bi-receipt-cutoff"></i>
+            <span id="ad-other-charge-title">AD Other Charges</span>
+          </span>
+          <small id="ad-other-charge-description" style="display: block;">Applied by the assigned Area Distributor</small>
+          <div id="ad-other-charges-items-list" style="margin-top: 8px;"></div>
+        </span>
+        <span class="summary-value" id="ad-other-charge">₱ 0.00</span>
       </div>
       <div class="summary-row total d-flex justify-content-between align-items-center">
         <span class="summary-label">Total Amount:</span>
@@ -467,6 +486,64 @@
     .summary-row.total .summary-value {
         color: #4A90E2;
         font-size: 18px;
+    }
+
+    .ad-other-charges-row {
+      background: #f8fbff;
+    }
+
+    .ad-other-charges-row .summary-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .ad-charges-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #1d4ed8;
+      font-weight: 700;
+    }
+
+    .ad-other-charges-row small {
+      color: #64748b;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .charge-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 12px;
+      border-top: 1px solid #e5e7eb;
+      margin-top: 6px;
+      padding-top: 6px;
+    }
+
+    .charge-item:first-of-type {
+      border-top: none;
+      margin-top: 0;
+      padding-top: 0;
+    }
+
+    .charge-item-name {
+      color: #374151;
+      font-weight: 500;
+    }
+
+    .charge-item-amount {
+      color: #1d4ed8;
+      font-weight: 600;
+      white-space: nowrap;
+      margin-left: 8px;
+    }
+
+    #ad-other-charge {
+      color: #1d4ed8 !important;
+      white-space: nowrap;
     }
 
     .payment-option {
@@ -1062,6 +1139,43 @@
         color: #0d6efd;
     }
 
+    .delivery-fee-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+        background: #eff6ff;
+        color: #1e3a8a;
+    }
+
+    .delivery-fee-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+        background: #dbeafe;
+        color: #2563eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 15px;
+    }
+
+    .delivery-fee-title {
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+
+    .delivery-fee-text {
+        font-size: 12px;
+        color: #475569;
+        line-height: 1.45;
+        margin-top: 2px;
+    }
+
     .pickup-address-card {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -1218,7 +1332,61 @@
     `;
     document.head.appendChild(toastStyle);
 
+    function getAvailableCustomerIds() {
+        const customerSelector = document.getElementById('customerSelector');
+
+        if (!customerSelector) {
+            return [];
+        }
+
+        return Array.from(customerSelector.options)
+            .map(option => option.value)
+            .filter(Boolean);
+    }
+
+    function clearSelectedCustomer() {
+        [
+            'selectedCustomerId',
+            'selectedCustomerName',
+            'selectedCustomerSerial',
+            'selectedCustomerNumber'
+        ].forEach(key => localStorage.removeItem(key));
+
+        const customerNameElement = document.getElementById('assigned-customer-name');
+        const customerDetailsElement = document.getElementById('assigned-customer-details');
+
+        if (customerNameElement) {
+            customerNameElement.textContent = 'Select a Customer';
+        }
+
+        if (customerDetailsElement) {
+            customerDetailsElement.textContent = '';
+        }
+
+        customerDropdown = null;
+    }
+
+    function ensureSelectedCustomerIsAvailable() {
+        const selectedCustomerId = localStorage.getItem('selectedCustomerId');
+
+        if (!selectedCustomerId) {
+            return true;
+        }
+
+        const isAvailable = getAvailableCustomerIds().includes(selectedCustomerId);
+
+        if (!isAvailable) {
+            clearSelectedCustomer();
+        }
+
+        return isAvailable;
+    }
+
     function loadSelectedCustomerFromProducts() {
+        if (!ensureSelectedCustomerIsAvailable()) {
+            return;
+        }
+
         const customerId = localStorage.getItem('selectedCustomerId');
         const customerName = localStorage.getItem('selectedCustomerName');
         const customerSerial = localStorage.getItem('selectedCustomerSerial');
@@ -1506,6 +1674,8 @@
     let customerDropdown = null;
 
     function openCustomerSelection() {
+        ensureSelectedCustomerIsAvailable();
+
         const modal = document.getElementById('clientModal');
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
@@ -1655,7 +1825,9 @@
         }
 
         // 🔥 IMPORTANT: refresh logic
-        detectAD();
+        if (typeof window.updateOrderSummary === 'function') {
+            window.updateOrderSummary();
+        }
 
         closeADModal();
         showSuccessMessage(`AD "${selected.name}" selected`);
@@ -1667,6 +1839,7 @@
 
 
     document.addEventListener('DOMContentLoaded', function() {
+        ensureSelectedCustomerIsAvailable();
         loadSelectedCustomerFromProducts();
         
         const savedCustomerName = localStorage.getItem('selectedCustomerName');
@@ -2187,9 +2360,12 @@
             const totalAmount = dealerCartData.reduce((sum, item) => {
                 return sum + (item.price * item.quantity);
             }, 0);
+            const activeOtherCharges = typeof getActiveADOtherCharge === 'function'
+                ? getActiveADOtherCharge(totalAmount)
+                : 0;
             
             localStorage.setItem('dealerCartItems', totalItems.toString());
-            localStorage.setItem('dealerCartTotal', totalAmount.toFixed(2));
+            localStorage.setItem('dealerCartTotal', (totalAmount + activeOtherCharges).toFixed(2));
 
             updateTotalItemsUI();
         
@@ -2200,16 +2376,51 @@
 
         function updateOrderSummary() {
             const subtotal = dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            const total = subtotal;
+            const chargeSummary = typeof getActiveADOtherChargeSummary === 'function'
+                ? getActiveADOtherChargeSummary(subtotal)
+                : { amount: 0, title: 'AD Other Charges', description: 'Applied by the assigned Area Distributor' };
+            const otherCharges = chargeSummary.amount;
+            const total = subtotal + otherCharges;
 
             const subtotalElement = document.getElementById('subtotal');
+            const otherChargeRow = document.getElementById('ad-other-charge-row');
+            const otherChargeElement = document.getElementById('ad-other-charge');
+            const otherChargeTitle = document.getElementById('ad-other-charge-title');
+            const otherChargeDescription = document.getElementById('ad-other-charge-description');
+            const otherChargesItemsList = document.getElementById('ad-other-charges-items-list');
             const totalFinalElement = document.getElementById('total-final');
             const finalTotalElement = document.getElementById('final-total');
 
             if (subtotalElement) subtotalElement.textContent = `₱ ${subtotal.toFixed(2)}`;
+            
+            // Check if it's an AD order and regular dealer type
+            const transactionType = document.querySelector('input[name="transaction_type"]:checked')?.value;
+            const isADOrder = transactionType === 'ad_order';
+            const isRegularDealer = window.authDealerType === 'regular';
+            
+            if (otherChargeRow && otherChargeElement) {
+                if (isADOrder && isRegularDealer) {
+                    // For AD orders with regular dealers, always show the row initially
+                    otherChargeRow.style.setProperty('display', 'flex', 'important');
+                    
+                    // Fetch charges from database if AD is selected
+                    if (window.selectedAD && window.selectedAD.id && otherChargesItemsList) {
+                        fetchAndDisplayADCharges(window.selectedAD.id, otherChargesItemsList, otherChargeElement, subtotal);
+                    }
+                } else {
+                    // For non-AD orders or non-regular dealers, show only if charges > 0
+                    otherChargeRow.style.setProperty('display', otherCharges > 0 ? 'flex' : 'none', 'important');
+                    otherChargeElement.textContent = `₱ ${otherCharges.toFixed(2)}`;
+                }
+            }
+            
+            if (otherChargeTitle) otherChargeTitle.textContent = chargeSummary.title;
+            if (otherChargeDescription) otherChargeDescription.textContent = chargeSummary.description;
             if (totalFinalElement) totalFinalElement.textContent = `₱ ${total.toFixed(2)}`;
             if (finalTotalElement) finalTotalElement.textContent = `₱ ${total.toFixed(2)}`;
         }
+
+        window.updateOrderSummary = updateOrderSummary;
 
         function showStockAlert(message) {
             if (typeof Swal !== 'undefined') {
@@ -2349,7 +2560,11 @@
                 
                 // Calculate subtotal and total
                 const subtotal = dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                const total = subtotal;
+                const chargeSummary = typeof getActiveADOtherChargeSummary === 'function'
+                    ? getActiveADOtherChargeSummary(subtotal)
+                    : { amount: 0, title: 'AD Other Charges', description: 'Applied by the assigned Area Distributor', items: [] };
+                const otherCharges = chargeSummary.amount;
+                const total = subtotal + otherCharges;
                 
                 const orderData = {
                     items: dealerCartData,
@@ -2357,6 +2572,11 @@
                     customer: customerData,
                     ad: adData,
                     delivery_type: deliveryType,
+                    // delivery_fee: otherCharges,
+                    other_charges: otherCharges,
+                    other_charge_label: chargeSummary.title,
+                    other_charge_description: chargeSummary.description,
+                    other_charge_items: chargeSummary.items || [],
                     payment_method: paymentMethod,
                     subtotal: subtotal,
                     total: total,
@@ -2433,7 +2653,240 @@
     window.matchedADs = @json($matchedADs);
     window.availableADs = @json($availableADs);
     window.authUserCenter = @json($userCenter);
+    window.authDealerType = @json(optional(auth()->user()->dealer)->dealer_type);
+    window.authDealerStoreType = @json(optional(auth()->user()->dealer)->store_type);
+    window.activeOtherCharges = @json($otherCharges ?? $charges ?? $activeCharges ?? []);
     window.selectedAD = null;
+
+    function parseMoney(value) {
+        if (value === null || value === undefined || value === '') return 0;
+
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : 0;
+        }
+
+        const amount = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
+
+        return Number.isFinite(amount) ? amount : 0;
+    }
+
+    function getChargeText(charge, fields, fallback = '') {
+        for (const field of fields) {
+            if (charge && charge[field] !== null && charge[field] !== undefined && charge[field] !== '') {
+                return String(charge[field]).trim();
+            }
+        }
+
+        return fallback;
+    }
+
+    function getChargeName(charge) {
+        const name = getChargeText(charge, ['name', 'charge', 'title'], 'AD Other Charges');
+        const code = getChargeText(charge, ['code', 'charge_code'], '');
+
+        return code && code.toLowerCase() !== name.toLowerCase()
+            ? `${name} (${code})`
+            : name;
+    }
+
+    function getChargeDescription(charge) {
+        return getChargeText(charge, ['description', 'desc'], 'Applied by the assigned Area Distributor');
+    }
+
+    function chargeAppliesToDealer(charge) {
+        const appliesTo = getChargeText(charge, ['applies_to', 'appliesTo', 'applies'], 'dealer').toLowerCase();
+
+        return appliesTo === 'dealer' || appliesTo === 'dealers';
+    }
+
+    function chargeIsActive(charge) {
+        const rawStatus = charge?.status ?? charge?.is_active ?? charge?.active ?? 'active';
+
+        if (typeof rawStatus === 'boolean') {
+            return rawStatus;
+        }
+
+        return String(rawStatus).trim().toLowerCase() === 'active' || String(rawStatus) === '1';
+    }
+
+    function getChargeAmount(charge, subtotal = 0) {
+        const amount = parseMoney(charge?.amount ?? charge?.charge_amount ?? charge?.value ?? charge?.price);
+        const type = getChargeText(charge, ['charge_type', 'type'], 'fixed').toLowerCase();
+
+        if (type.includes('percent')) {
+            return subtotal * (amount / 100);
+        }
+
+        return amount;
+    }
+
+    function normalizeMatchValue(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function chargeBelongsToSelectedAD(charge, ad = window.selectedAD) {
+        const chargeADUserId = getChargeText(charge, [
+            'ad_user_id',
+            'adUserId',
+            'area_distributor_user_id',
+            'areaDistributorUserId',
+            'user_id',
+            'userId'
+        ], '');
+
+        if (chargeADUserId) {
+            return ad?.user_id !== undefined && String(chargeADUserId) === String(ad.user_id);
+        }
+
+        const chargeADId = getChargeText(charge, [
+            'ad_id',
+            'area_distributor_id',
+            'areaDistributorId',
+            'area_distributor',
+            'areaDistributor'
+        ], '');
+
+        if (chargeADId) {
+            return ad?.id !== undefined && String(chargeADId) === String(ad.id);
+        }
+
+        const chargeADName = normalizeMatchValue(getChargeText(charge, [
+            'ad_name',
+            'area_distributor_name',
+            'areaDistributorName'
+        ], ''));
+        const selectedADName = normalizeMatchValue(ad?.name);
+
+        if (chargeADName) {
+            return chargeADName === selectedADName;
+        }
+
+        const chargeADCode = normalizeMatchValue(getChargeText(charge, [
+            'ad_code',
+            'area_distributor_code',
+            'areaDistributorCode',
+            'ad_reference',
+            'store_code'
+        ], ''));
+        const selectedADCode = normalizeMatchValue(ad?.ad_code || ad?.code || ad?.area_distributor_code || ad?.ad_reference || ad?.store_code);
+
+        if (chargeADCode) {
+            return chargeADCode === selectedADCode;
+        }
+
+        return true;
+    }
+
+    function displayChargeItems(chargeItems, container) {
+      if (!container || !chargeItems || chargeItems.length === 0) {
+        if (container) container.innerHTML = '';
+        return;
+      }
+
+      let chargeItemsHTML = '';
+      chargeItems.forEach(chargeItem => {
+        chargeItemsHTML += `
+          <div class="charge-item">
+            <span class="charge-item-name">${chargeItem.name || 'Charge'}</span>
+            <span class="charge-item-amount">₱ ${parseFloat(chargeItem.amount || 0).toFixed(2)}</span>
+          </div>
+        `;
+      });
+      container.innerHTML = chargeItemsHTML;
+    }
+
+    function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
+      if (!adId || !container) return;
+
+      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.charges && data.charges.length > 0) {
+            console.log('Fetched AD charges:', data.charges);
+            displayChargeItems(data.charges, container);
+            
+            // Update the charges amount
+            if (chargesElement) {
+              chargesElement.textContent = '₱ ' + data.total.toFixed(2);
+            }
+            
+            // Update the order total
+            const newTotal = subtotalAmount + data.total;
+            const totalFinalElement = document.getElementById('total-final');
+            if (totalFinalElement) {
+              totalFinalElement.textContent = '₱ ' + newTotal.toFixed(2);
+            }
+          } else {
+            console.log('No charges found for AD:', adId);
+            container.innerHTML = '';
+            // Hide the row if no charges
+            const otherChargesRow = document.getElementById('ad-other-charge-row');
+            if (otherChargesRow) {
+              otherChargesRow.style.setProperty('display', 'none', 'important');
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching AD charges:', error);
+          container.innerHTML = '';
+        });
+    }
+
+    function getConfiguredChargeSummary(subtotal = 0) {
+        const charges = Array.isArray(window.activeOtherCharges) ? window.activeOtherCharges : [];
+        const applicableCharges = charges.filter(charge => (
+            chargeIsActive(charge) &&
+            chargeAppliesToDealer(charge) &&
+            chargeBelongsToSelectedAD(charge) &&
+            getChargeAmount(charge, subtotal) > 0
+        ));
+
+        if (!applicableCharges.length) {
+            return {
+                amount: 0,
+                title: 'AD Other Charges',
+                description: 'Applied by the assigned Area Distributor',
+                items: []
+            };
+        }
+
+        const amount = applicableCharges.reduce((sum, charge) => sum + getChargeAmount(charge, subtotal), 0);
+        const firstCharge = applicableCharges[0];
+
+        return {
+            amount,
+            title: applicableCharges.length === 1
+                ? getChargeName(firstCharge)
+                : `Other Charges (${applicableCharges.length})`,
+            description: applicableCharges.length === 1
+                ? getChargeDescription(firstCharge)
+                : 'Active dealer charges applied to this order.',
+            items: applicableCharges.map(charge => ({
+                name: getChargeName(charge),
+                description: getChargeDescription(charge),
+                amount: getChargeAmount(charge, subtotal)
+            }))
+        };
+    }
+
+    function getActiveADOtherChargeSummary(subtotal = 0) {
+        const transactionType = document.querySelector('input[name="transaction_type"]:checked')?.value;
+
+        if (transactionType !== 'ad_order') {
+            return {
+                amount: 0,
+                title: 'AD Other Charges',
+                description: 'Applied by the assigned Area Distributor',
+                items: []
+            };
+        }
+
+        return getConfiguredChargeSummary(subtotal);
+    }
+
+    function getActiveADOtherCharge(subtotal = 0) {
+        return getActiveADOtherChargeSummary(subtotal).amount;
+    }
 
     document.addEventListener('DOMContentLoaded', function () {
         initTransactionSystem();
@@ -2463,6 +2916,10 @@
             ad.style.display = 'block';
 
             detectAD();
+        }
+
+        if (typeof window.updateOrderSummary === 'function') {
+            window.updateOrderSummary();
         }
     }
 
@@ -2568,6 +3025,9 @@
 
             adName.textContent = nearest.name;
             renderADDetails(nearest);
+            if (typeof window.updateOrderSummary === 'function') {
+                window.updateOrderSummary();
+            }
             return;
         }
 
@@ -2579,6 +3039,9 @@
 
             adName.textContent = nearest.name;
             adDetails.textContent = buildDetails(nearest);
+            if (typeof window.updateOrderSummary === 'function') {
+                window.updateOrderSummary();
+            }
             return;
         }
 
@@ -2616,9 +3079,10 @@
         // }));
 
         const formatted = sourceList.map(ad => ({
+            ...ad,
             id: ad.id,
             name: ad.name,
-            areas: ad.areas ? ad.areas.map(area => area.area_name) : [],
+            areas: ad.areas ? ad.areas.map(area => typeof area === 'string' ? area : area.area_name) : [],
             distance: ad.distance,
             address: ad.address
         }));
@@ -2649,13 +3113,14 @@
     function toggleDeliveryAddress() {
         const selected = document.querySelector('input[name="delivery_type"]:checked')?.value;
         const pickupCard = document.getElementById('pickup-address-card');
+        const deliveryFeeNote = document.getElementById('delivery-fee-note');
 
-        if (!pickupCard) return;
+        if (deliveryFeeNote) {
+            deliveryFeeNote.style.display = selected === 'delivery' ? 'flex' : 'none';
+        }
 
-        if (selected === 'pickup') {
-            pickupCard.style.display = 'block';
-        } else {
-            pickupCard.style.display = 'none';
+        if (pickupCard) {
+            pickupCard.style.display = selected === 'pickup' ? 'block' : 'none';
         }
     }
 

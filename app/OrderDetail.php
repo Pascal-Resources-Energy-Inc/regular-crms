@@ -29,4 +29,9 @@ class OrderDetail extends Model
     {
         return $this->hasMany(AreaAd::class,'ad_id');
     }
+
+    public function charges()
+    {
+        return $this->hasMany(OrderDetailCharge::class, 'order_detail_id');
+    }
 }

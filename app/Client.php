@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Client extends Model
 {
     protected $fillable = [
-        'user_id', 'name', 'email_address', 'number', 'address', 'status', 'serial_number'
+        'user_id', 'name', 'email_address', 'number', 'address', 'status', 'dealer_id'
     ];
     
     public function user()

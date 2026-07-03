@@ -13,6 +13,7 @@
         "ladumor/laravel-pwa": "^0.0.5",
         "laravel/framework": "5.7.*",
         "laravel/tinker": "^1.0",
+        "realrashid/sweet-alert": "^7.3",
         "spatie/laravel-export": "^0.1.5"
     },
     "require-dev": {

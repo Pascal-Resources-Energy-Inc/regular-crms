@@ -39,6 +39,10 @@ Route::get('user-profile','UserController@view');
 Route::get('history','HistoryController@index');
 Route::get('account','AccountController@index');
 Route::patch('account','AccountController@update')->name('account.update');
+Route::get('/customers', 'CustomerController@index')->name('customers');
+Route::get('/dealer/customers', 'CustomerController@index')->name('dealer.customers');
+Route::post('/new-customer', 'CustomerController@store')->name('customers.store');
+Route::get('/view-client/{id}', 'CustomerController@show')->name('customers.show');
 
 Route::get('/storelocation', 'HomeController@storelocation')->name('storelocation');
 Route::get('/api/locations-map', 'HomeController@getLocationsForMap')->name('locations.map');
@@ -55,6 +59,7 @@ Route::get('/about', 'HomeController@about')->name('about');
 
 Route::get('/cart', 'CartController@index')->name('cart');
 Route::get('/place_order', 'TransactionController@index')->name('place_order');
+Route::get('/api/ad-charges/{adId}', 'TransactionController@getADCharges')->name('api.ad.charges');
 // Route::post('/transactions/store', 'TransactionController@store')->name('transactions.store');
 Route::get('get-user/{id}', 'CustomerController@getUser');
 

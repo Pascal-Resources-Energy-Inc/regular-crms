@@ -45,7 +45,9 @@ class TransactionController extends Controller
     {
         $user = auth()->user();
 
-        $customers = Client::whereHas('serial')->get();
+        $customers = Client::with('serial')
+            ->where('dealer_id', $user->id)
+            ->get();
         $items = Item::get();
         $dealers = Dealer::get();
         $transactions = [];
@@ -99,6 +101,21 @@ class TransactionController extends Controller
             // $item = Item::findOrFail($request->item_id);
             $item = Product::findOrFail($request->item_id);
             $client = Client::with('user')->findOrFail($request->customer_id);
+
+            if ((int) $client->dealer_id !== (int) auth()->id()) {
+                $message = 'Selected client is not assigned to your dealer account.';
+
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $message
+                    ], 403);
+                }
+
+                Alert::error($message)->persistent('Dismiss');
+                return back()->withInput();
+            }
+
             $dealerStock = $this->getDealerProductStock($item, auth()->id());
             $transactionStatus = $dealerStock >= (int) $request->qty ? 'Completed' : 'Pending';
 
@@ -175,6 +192,8 @@ class TransactionController extends Controller
                 'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
                 'delivery_type' => 'nullable|string|in:pickup,delivery',
                 'delivery_fee' => 'nullable|numeric|min:0',
+                'other_charges' => 'nullable|numeric|min:0',
+                'other_charge_items' => 'nullable|json',
             ]);
 
             // $item = Item::findOrFail($request->item_id);
@@ -209,8 +228,31 @@ class TransactionController extends Controller
             if (Schema::hasColumn('order_details', 'delivery_fee')) {
                 $transaction->delivery_fee = $request->delivery_fee ?? 0;
             }
+            if (Schema::hasColumn('order_details', 'other_charges')) {
+                $transaction->other_charges = $request->other_charges ?? 0;
+            }
             $transaction->status = 'Pending';
             $transaction->save();
+
+            // ✅ SAVE INDIVIDUAL CHARGES
+            if ($request->has('other_charge_items') && $request->other_charge_items) {
+                try {
+                    $chargeItems = json_decode($request->other_charge_items, true);
+                    if (is_array($chargeItems) && !empty($chargeItems)) {
+                        foreach ($chargeItems as $charge) {
+                            if (isset($charge['name']) && isset($charge['amount'])) {
+                                $transaction->charges()->create([
+                                    'name' => $charge['name'],
+                                    'amount' => $charge['amount']
+                                ]);
+                            }
+                        }
+                    }
+                } catch (\Exception $chargeError) {
+                    \Log::warning('Failed to save charge items for order ' . $transaction->id . ': ' . $chargeError->getMessage());
+                    // Don't fail the transaction if charges fail to save
+                }
+            }
 
             // ✅ SEND EMAIL TO AD
             if ($ad->user && $ad->user->email) {
@@ -575,5 +617,59 @@ class TransactionController extends Controller
         }
 
         return max(0, (int) $completedOrderQty - (int) $soldQty);
+    }
+
+    /**
+     * Fetch charges for an Area Distributor
+     */
+    public function getADCharges($adId)
+    {
+        try {
+            $charges = collect();
+
+            // Try to fetch from other_charges or charges table
+            foreach (['other_charges', 'charges'] as $chargeTable) {
+                if (Schema::hasTable($chargeTable)) {
+                    $charges = DB::table($chargeTable)
+                        ->where('ad_id', $adId)
+                        ->when(Schema::hasColumn($chargeTable, 'deleted_at'), fn ($query) => $query->whereNull('deleted_at'))
+                        ->when(Schema::hasColumn($chargeTable, 'status'), function ($query) {
+                            $query->where(function ($statusQuery) {
+                                $statusQuery
+                                    ->where('status', 'Active')
+                                    ->orWhere('status', 'active')
+                                    ->orWhere('status', 1)
+                                    ->orWhere('status', '1');
+                            });
+                        })
+                        ->when(Schema::hasColumn($chargeTable, 'is_active'), fn ($query) => $query->where('is_active', 1))
+                        ->get()
+                        ->map(function ($charge) {
+                            return [
+                                'name' => $charge->name ?? $charge->charge_name ?? 'Charge',
+                                'amount' => (float) ($charge->amount ?? $charge->charge_amount ?? 0),
+                                'description' => $charge->description ?? null,
+                            ];
+                        });
+
+                    if ($charges->isNotEmpty()) {
+                        break;
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'charges' => $charges,
+                'total' => $charges->sum('amount')
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch charges: ' . $e->getMessage(),
+                'charges' => [],
+                'total' => 0
+            ], 500);
+        }
     }
 }

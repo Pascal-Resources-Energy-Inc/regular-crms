@@ -99,6 +99,64 @@
       font-weight: 600 !important;
     }
 
+    .other-charges-row {
+      background: #f8fbff;
+    }
+
+    .other-charges-row .info-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .other-charges-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #1d4ed8;
+      font-weight: 700;
+    }
+
+    .other-charges-row small {
+      color: #64748b;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .charge-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 12px;
+      border-top: 1px solid #e5e7eb;
+      margin-top: 6px;
+      padding-top: 6px;
+    }
+
+    .charge-item:first-of-type {
+      border-top: none;
+      margin-top: 0;
+      padding-top: 0;
+    }
+
+    .charge-item-name {
+      color: #374151;
+      font-weight: 500;
+    }
+
+    .charge-item-amount {
+      color: #1d4ed8;
+      font-weight: 600;
+      white-space: nowrap;
+      margin-left: 8px;
+    }
+
+    #other-charges {
+      color: #1d4ed8 !important;
+      white-space: nowrap;
+    }
+
     .order-item {
       display: flex;
       justify-content: space-between;
@@ -405,6 +463,17 @@
         <div class="info-row d-flex justify-content-between align-items-center py-2 border-bottom">
           <span class="info-label">Total Items:</span>
           <span class="info-value fw-semibold" id="total-items">0</span>
+        </div>
+        <div id="other-charges-row" class="info-row other-charges-row d-flex justify-content-between align-items-start py-2 border-bottom" style="display:block !important;">
+          <span class="info-label">
+            <span class="other-charges-title">
+              <i class="bi bi-receipt-cutoff"></i>
+              <span id="other-charges-title">AD Other Charges</span>
+            </span>
+            {{-- <small id="other-charges-description">Applied by the assigned Area Distributor</small> --}}
+            <div id="other-charges-items-list" style="margin-top: 8px;"></div>
+          </span>
+          <span class="info-value fw-semibold" id="other-charges">₱ 0.00</span>
         </div>
         <div class="info-row d-flex justify-content-between align-items-center py-3 bg-light mx-n3 mb-n3">
           <span class="info-label">Total Amount:</span>
@@ -715,6 +784,22 @@
     }
 
     window.matchedAD = JSON.parse(localStorage.getItem('selectedAD') || 'null');
+    window.authDealerType = @json(optional(auth()->user()->dealer)->dealer_type);
+    window.authDealerStoreType = @json(optional(auth()->user()->dealer)->store_type);
+
+    function parseMoney(value) {
+      if (value === null || value === undefined || value === '') return 0;
+
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+      }
+
+      const cleaned = String(value).replace(/[^0-9.-]/g, '');
+      const amount = parseFloat(cleaned);
+
+      return Number.isFinite(amount) ? amount : 0;
+    }
+
     // function initializeOrderPage() {
     //     const orderId = 'ORD-' + Date.now().toString().slice(-6);
         
@@ -737,12 +822,50 @@
       const orderId = 'ORD-' + Date.now().toString().slice(-6);
 
       const totalItems = dealerCartData.reduce((sum, item) => sum + item.quantity, 0);
-      const totalAmount = dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const subtotalAmount = dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const isADOrder = orderData.transaction_type === 'ad_order';
+      const otherCharges = isADOrder
+        ? parseMoney(orderData.delivery_fee || orderData.other_charges || 0)
+        : 0;
+      const totalAmount = subtotalAmount + otherCharges;
 
       document.getElementById('total-items').textContent = totalItems;
+      const otherChargesRow = document.getElementById('other-charges-row');
+      const otherChargesElement = document.getElementById('other-charges');
+      const otherChargesTitle = document.getElementById('other-charges-title');
+      const otherChargesDescription = document.getElementById('other-charges-description');
+      const otherChargesItemsList = document.getElementById('other-charges-items-list');
+
+      if (otherChargesRow && otherChargesElement) {
+        // For AD orders with regular dealer, always show the row initially (charges will be fetched)
+        const isRegularDealer = window.authDealerType === 'regular';
+        if (isADOrder && isRegularDealer) {
+          otherChargesRow.style.setProperty('display', 'flex', 'important');
+        } else {
+          otherChargesRow.style.setProperty('display', otherCharges > 0 ? 'flex' : 'none', 'important');
+        }
+        otherChargesElement.textContent = '₱ ' + otherCharges.toFixed(2);
+      }
+      if (otherChargesTitle) {
+        otherChargesTitle.textContent = orderData.other_charge_label || 'AD Other Charges';
+      }
+      if (otherChargesDescription) {
+        otherChargesDescription.textContent = orderData.other_charge_description || 'Applied by the assigned Area Distributor';
+      }
+
+      // Display charge items if available from localStorage first
+      if (otherChargesItemsList && orderData.other_charge_items && orderData.other_charge_items.length > 0) {
+        displayChargeItems(orderData.other_charge_items, otherChargesItemsList);
+      } else if (isADOrder && window.authDealerType === 'regular' && adData?.id) {
+        // Otherwise fetch from database (only for regular dealers on AD orders)
+        fetchAndDisplayADCharges(adData.id, otherChargesItemsList, otherChargesElement, subtotalAmount);
+      }
+
       document.getElementById('order-total').textContent = '₱ ' + totalAmount.toFixed(2);
 
       orderData.total_amount = totalAmount;
+      // orderData.delivery_fee = otherCharges;
+      orderData.other_charges = otherCharges;
 
       updatePaymentMethodDisplay(orderData.payment_method);
       updateDeliveryMethodDisplay(orderData.delivery_type);
@@ -752,6 +875,63 @@
       // displayTransactionType(); // ✅ AD / CLIENT DETECT
 
       orderData.order_id = orderId;
+    }
+
+    function displayChargeItems(chargeItems, container) {
+      if (!container || !chargeItems || chargeItems.length === 0) {
+        if (container) container.innerHTML = '';
+        return;
+      }
+
+      let chargeItemsHTML = '';
+      chargeItems.forEach(chargeItem => {
+        chargeItemsHTML += `
+          <div class="charge-item">
+            <span class="charge-item-name">${chargeItem.name || 'Charge'}</span>
+            <span class="charge-item-amount">₱ ${parseFloat(chargeItem.amount || 0).toFixed(2)}</span>
+          </div>
+        `;
+      });
+      container.innerHTML = chargeItemsHTML;
+    }
+
+    function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
+      if (!adId || !container) return;
+
+      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.charges && data.charges.length > 0) {
+            console.log('Fetched AD charges:', data.charges);
+            displayChargeItems(data.charges, container);
+            
+            // Update the charges amount
+            if (chargesElement) {
+              chargesElement.textContent = '₱ ' + data.total.toFixed(2);
+            }
+            
+            // Update the order total
+            const newTotal = subtotalAmount + data.total;
+            document.getElementById('order-total').textContent = '₱ ' + newTotal.toFixed(2);
+            
+            // Update orderData
+            orderData.delivery_fee = data.total;
+            orderData.other_charges = data.total;
+            orderData.total_amount = newTotal;
+          } else {
+            console.log('No charges found for AD:', adId);
+            container.innerHTML = '';
+            // Hide the row if no charges
+            const otherChargesRow = document.getElementById('other-charges-row');
+            if (otherChargesRow) {
+              otherChargesRow.style.setProperty('display', 'none', 'important');
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching AD charges:', error);
+          container.innerHTML = '';
+        });
     }
 
     // function displayTransactionType() {
@@ -1072,6 +1252,12 @@
                   formData.append('payment_method', orderData.payment_method || 'cash');
                   formData.append('delivery_type', orderData.delivery_type || 'pickup');
                   formData.append('delivery_fee', orderData.delivery_fee || 0);
+                  formData.append('other_charges', orderData.other_charges || 0);
+                  
+                  // Store individual charge items as JSON
+                  if (orderData.other_charge_items && orderData.other_charge_items.length > 0) {
+                      formData.append('other_charge_items', JSON.stringify(orderData.other_charge_items));
+                  }
 
                   const response = await fetch(storeUrl, {
                       method: 'POST',
