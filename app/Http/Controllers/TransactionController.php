@@ -192,7 +192,7 @@ class TransactionController extends Controller
                 'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
                 'delivery_type' => 'nullable|string|in:pickup,delivery',
                 'delivery_fee' => 'nullable|numeric|min:0',
-                'other_charges' => 'nullable|numeric|min:0',
+                'other_charges' => 'nullable|numeric',
                 'other_charge_items' => 'nullable|json',
             ]);
 
@@ -645,10 +645,29 @@ class TransactionController extends Controller
                         ->when(Schema::hasColumn($chargeTable, 'is_active'), fn ($query) => $query->where('is_active', 1))
                         ->get()
                         ->map(function ($charge) {
+                            $rawAmount = $charge->amount ?? $charge->charge_amount ?? $charge->value ?? $charge->price ?? 0;
+                            $amount = is_numeric($rawAmount)
+                                ? (float) $rawAmount
+                                : (float) preg_replace('/[^0-9.\-]/', '', (string) $rawAmount);
+                            $typeText = strtolower(trim(implode(' ', array_filter(array_map('strval', [
+                                $charge->charge_type ?? null,
+                                $charge->type ?? null,
+                                $charge->entry_type ?? null,
+                                $charge->kind ?? null,
+                                $charge->transaction_type ?? null,
+                            ])))));
+                            $name = $charge->name ?? $charge->charge_name ?? null;
+                            $nameText = strtolower(trim((string) $name));
+                            $isDiscount = strpos($typeText, 'discount') !== false
+                                || strpos($nameText, 'discount') !== false
+                                || $amount < 0;
+
                             return [
-                                'name' => $charge->name ?? $charge->charge_name ?? 'Charge',
-                                'amount' => (float) ($charge->amount ?? $charge->charge_amount ?? 0),
+                                'name' => $name ?? ($isDiscount ? 'AD Discount' : 'Charge'),
+                                'amount' => abs($amount),
                                 'description' => $charge->description ?? null,
+                                'type' => $isDiscount ? 'discount' : 'charge',
+                                'charge_type' => $typeText,
                             ];
                         });
 
@@ -658,10 +677,20 @@ class TransactionController extends Controller
                 }
             }
 
+            $chargeItems = $charges->filter(fn ($charge) => $charge['type'] !== 'discount')->values();
+            $discountItems = $charges->filter(fn ($charge) => $charge['type'] === 'discount')->values();
+            $chargesTotal = $chargeItems->sum('amount');
+            $discountTotal = $discountItems->sum('amount');
+            $netTotal = $chargesTotal - $discountTotal;
+
             return response()->json([
                 'success' => true,
-                'charges' => $charges,
-                'total' => $charges->sum('amount')
+                'charges' => $chargeItems,
+                'discounts' => $discountItems,
+                'all_items' => $charges,
+                'charges_total' => $chargesTotal,
+                'discount_total' => $discountTotal,
+                'total' => $netTotal
             ]);
         } catch (\Exception $e) {
             return response()->json([

@@ -274,8 +274,15 @@
         <span class="summary-label">Subtotal:</span>
         <span class="summary-value" id="subtotal">₱ 0.00</span>
       </div>
-      <div class="summary-row d-flex justify-content-between align-items-center">
-        <span class="summary-label">Discount:</span>
+      <div class="summary-row discount-summary-row d-flex justify-content-between align-items-start" style="display:none !important;">
+        <span class="summary-label">
+          <span class="discount-title">
+            <i class="bi bi-tag-fill"></i>
+            AD Discount
+          </span>
+          <small id="discount-description" style="display: none;">Applied by the assigned Area Distributor</small>
+          <div id="ad-discount-items-list" style="margin-top: 8px;"></div>
+        </span>
         <span class="summary-value" id="discount">₱ 0.00</span>
       </div>
       <div id="ad-other-charge-row" class="summary-row ad-other-charges-row d-flex justify-content-between align-items-start" style="display: none;">
@@ -306,7 +313,7 @@
             <i class="bi bi-cash-coin"></i>
           </div>
           <div class="payment-details flex-grow-1">
-            <div class="payment-name">Cash on hand</div>
+            <div class="payment-name">Cash on Delivery</div>
             <div class="payment-desc">Pay when you receive your order</div>
           </div>
         </label>
@@ -492,21 +499,37 @@
       background: #f8fbff;
     }
 
-    .ad-other-charges-row .summary-label {
+    .discount-summary-row {
+      /* background: #f0fdf4; */
+      border-top: 1px solid #dcfce7;
+      border-bottom: 1px solid #dcfce7;
+    }
+
+    .ad-other-charges-row .summary-label,
+    .discount-summary-row .summary-label {
       display: flex;
       flex-direction: column;
       gap: 2px;
     }
 
-    .ad-charges-title {
+    .ad-charges-title,
+    .discount-title {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      color: #1d4ed8;
       font-weight: 700;
     }
 
-    .ad-other-charges-row small {
+    .ad-charges-title {
+      color: #1d4ed8;
+    }
+
+    .discount-title {
+      color: #dc3545;
+    }
+
+    .ad-other-charges-row small,
+    .discount-summary-row small {
       color: #64748b;
       font-size: 11px;
       line-height: 1.35;
@@ -532,6 +555,12 @@
     .charge-item-name {
       color: #374151;
       font-weight: 500;
+    }
+
+    .discount-item .charge-item-name,
+    .discount-item .charge-item-amount,
+    #discount {
+      color: #dc3545 !important;
     }
 
     .charge-item-amount {
@@ -2378,11 +2407,17 @@
             const subtotal = dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const chargeSummary = typeof getActiveADOtherChargeSummary === 'function'
                 ? getActiveADOtherChargeSummary(subtotal)
-                : { amount: 0, title: 'AD Other Charges', description: 'Applied by the assigned Area Distributor' };
-            const otherCharges = chargeSummary.amount;
+                : { amount: 0, chargesTotal: 0, discountTotal: 0, title: 'AD Other Charges', description: 'Applied by the assigned Area Distributor', chargeItems: [], discountItems: [] };
+            const otherCharges = parseMoney(chargeSummary.amount);
+            const chargesTotal = parseMoney(chargeSummary.chargesTotal ?? otherCharges);
+            const discountTotal = parseMoney(chargeSummary.discountTotal);
             const total = subtotal + otherCharges;
 
             const subtotalElement = document.getElementById('subtotal');
+            const discountRow = document.querySelector('.discount-summary-row');
+            const discountElement = document.getElementById('discount');
+            const discountDescription = document.getElementById('discount-description');
+            const discountItemsList = document.getElementById('ad-discount-items-list');
             const otherChargeRow = document.getElementById('ad-other-charge-row');
             const otherChargeElement = document.getElementById('ad-other-charge');
             const otherChargeTitle = document.getElementById('ad-other-charge-title');
@@ -2393,6 +2428,13 @@
 
             if (subtotalElement) subtotalElement.textContent = `₱ ${subtotal.toFixed(2)}`;
             
+            if (discountRow) {
+                discountRow.style.setProperty('display', discountTotal > 0 ? 'flex' : 'none', 'important');
+            }
+            if (discountElement) discountElement.textContent = `-₱ ${discountTotal.toFixed(2)}`;
+            if (discountDescription) discountDescription.style.display = discountTotal > 0 ? 'block' : 'none';
+            if (discountItemsList) displayDiscountItems(chargeSummary.discountItems || [], discountItemsList);
+
             // Check if it's an AD order and regular dealer type
             const transactionType = document.querySelector('input[name="transaction_type"]:checked')?.value;
             const isADOrder = transactionType === 'ad_order';
@@ -2410,8 +2452,11 @@
                 } else {
                     // For non-AD orders or non-regular dealers, show only if charges > 0
                     otherChargeRow.style.setProperty('display', otherCharges > 0 ? 'flex' : 'none', 'important');
-                    otherChargeElement.textContent = `₱ ${otherCharges.toFixed(2)}`;
+                    otherChargeElement.textContent = `₱ ${chargesTotal.toFixed(2)}`;
                 }
+            }
+            if (otherChargeRow && chargesTotal <= 0 && discountTotal > 0) {
+                otherChargeRow.style.setProperty('display', 'none', 'important');
             }
             
             if (otherChargeTitle) otherChargeTitle.textContent = chargeSummary.title;
@@ -2563,7 +2608,9 @@
                 const chargeSummary = typeof getActiveADOtherChargeSummary === 'function'
                     ? getActiveADOtherChargeSummary(subtotal)
                     : { amount: 0, title: 'AD Other Charges', description: 'Applied by the assigned Area Distributor', items: [] };
-                const otherCharges = chargeSummary.amount;
+                const otherCharges = parseMoney(chargeSummary.amount);
+                const adChargeTotal = parseMoney(chargeSummary.chargesTotal ?? otherCharges);
+                const discountTotal = parseMoney(chargeSummary.discountTotal);
                 const total = subtotal + otherCharges;
                 
                 const orderData = {
@@ -2574,9 +2621,13 @@
                     delivery_type: deliveryType,
                     // delivery_fee: otherCharges,
                     other_charges: otherCharges,
+                    ad_charge_total: adChargeTotal,
+                    discount_total: discountTotal,
                     other_charge_label: chargeSummary.title,
                     other_charge_description: chargeSummary.description,
                     other_charge_items: chargeSummary.items || [],
+                    other_charge_only_items: chargeSummary.chargeItems || [],
+                    discount_items: chargeSummary.discountItems || [],
                     payment_method: paymentMethod,
                     subtotal: subtotal,
                     total: total,
@@ -2709,8 +2760,25 @@
         return String(rawStatus).trim().toLowerCase() === 'active' || String(rawStatus) === '1';
     }
 
+    function getChargeKind(charge) {
+        const type = [
+            'entry_type',
+            'kind',
+            'charge_type',
+            'type',
+            'transaction_type'
+        ].map(field => charge?.[field] ?? '').join(' ').toLowerCase();
+        const name = getChargeText(charge, ['name', 'charge', 'title', 'charge_name'], '').toLowerCase();
+
+        return type.includes('discount') || name.includes('discount') ? 'discount' : 'charge';
+    }
+
+    function chargeIsDiscount(charge) {
+        return getChargeKind(charge) === 'discount';
+    }
+
     function getChargeAmount(charge, subtotal = 0) {
-        const amount = parseMoney(charge?.amount ?? charge?.charge_amount ?? charge?.value ?? charge?.price);
+        const amount = Math.abs(parseMoney(charge?.amount ?? charge?.charge_amount ?? charge?.value ?? charge?.price));
         const type = getChargeText(charge, ['charge_type', 'type'], 'fixed').toLowerCase();
 
         if (type.includes('percent')) {
@@ -2777,6 +2845,15 @@
         return true;
     }
 
+    function escapeHTML(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     function displayChargeItems(chargeItems, container) {
       if (!container || !chargeItems || chargeItems.length === 0) {
         if (container) container.innerHTML = '';
@@ -2785,14 +2862,24 @@
 
       let chargeItemsHTML = '';
       chargeItems.forEach(chargeItem => {
+        const isDiscount = chargeIsDiscount(chargeItem) || parseMoney(chargeItem.amount) < 0;
+        const amount = Math.abs(parseMoney(chargeItem.amount || 0));
         chargeItemsHTML += `
-          <div class="charge-item">
-            <span class="charge-item-name">${chargeItem.name || 'Charge'}</span>
-            <span class="charge-item-amount">₱ ${parseFloat(chargeItem.amount || 0).toFixed(2)}</span>
+          <div class="charge-item ${isDiscount ? 'discount-item' : ''}">
+            <span class="charge-item-name">${escapeHTML(chargeItem.name || (isDiscount ? 'AD Discount' : 'Charge'))}</span>
+            <span class="charge-item-amount">${isDiscount ? '-' : ''}₱ ${amount.toFixed(2)}</span>
           </div>
         `;
       });
       container.innerHTML = chargeItemsHTML;
+    }
+
+    function displayDiscountItems(discountItems, container) {
+      displayChargeItems((discountItems || []).map(item => ({
+        ...item,
+        type: 'discount',
+        amount: Math.abs(parseMoney(item.amount || 0))
+      })), container);
     }
 
     function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
@@ -2832,6 +2919,91 @@
         });
     }
 
+    function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
+      if (!adId || !container) return;
+
+      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+        .then(response => response.json())
+        .then(data => {
+          const fetchedCharges = data.charges || [];
+          const fetchedDiscounts = data.discounts || [];
+
+          if (data.success && (fetchedCharges.length > 0 || fetchedDiscounts.length > 0)) {
+            const chargesTotal = parseMoney(data.charges_total ?? data.total);
+            const discountTotal = parseMoney(data.discount_total);
+            const netAdjustment = parseMoney(data.total);
+
+            displayChargeItems(fetchedCharges, container);
+
+            window.fetchedADChargeSummary = {
+              adId: String(adId),
+              amount: netAdjustment,
+              chargesTotal,
+              discountTotal,
+              title: fetchedCharges.length === 1
+                ? (fetchedCharges[0].name || 'AD Other Charges')
+                : `AD Other Charges (${fetchedCharges.length})`,
+              description: discountTotal > 0
+                ? 'AD charges and discount applied by the assigned Area Distributor.'
+                : 'Applied by the assigned Area Distributor',
+              items: [
+                ...fetchedCharges,
+                ...fetchedDiscounts.map(item => ({
+                  ...item,
+                  type: 'discount',
+                  amount: -Math.abs(parseMoney(item.amount || 0))
+                }))
+              ],
+              chargeItems: fetchedCharges,
+              discountItems: fetchedDiscounts
+            };
+
+            if (chargesElement) {
+              chargesElement.textContent = '₱ ' + chargesTotal.toFixed(2);
+            }
+
+            const otherChargesRow = document.getElementById('ad-other-charge-row');
+            if (otherChargesRow) {
+              otherChargesRow.style.setProperty('display', chargesTotal > 0 ? 'flex' : 'none', 'important');
+            }
+
+            const discountRow = document.querySelector('.discount-summary-row');
+            const discountElement = document.getElementById('discount');
+            const discountDescription = document.getElementById('discount-description');
+            const discountItemsList = document.getElementById('ad-discount-items-list');
+            if (discountRow) {
+              discountRow.style.setProperty('display', discountTotal > 0 ? 'flex' : 'none', 'important');
+            }
+            if (discountElement) discountElement.textContent = '-₱ ' + discountTotal.toFixed(2);
+            if (discountDescription) discountDescription.style.display = discountTotal > 0 ? 'block' : 'none';
+            if (discountItemsList) displayDiscountItems(fetchedDiscounts, discountItemsList);
+
+            const totalFinalElement = document.getElementById('total-final');
+            if (totalFinalElement) {
+              totalFinalElement.textContent = '₱ ' + (subtotalAmount + netAdjustment).toFixed(2);
+            }
+          } else {
+            window.fetchedADChargeSummary = null;
+            container.innerHTML = '';
+
+            const discountRow = document.querySelector('.discount-summary-row');
+            const discountItemsList = document.getElementById('ad-discount-items-list');
+            if (discountRow) discountRow.style.setProperty('display', 'none', 'important');
+            if (discountItemsList) discountItemsList.innerHTML = '';
+
+            const otherChargesRow = document.getElementById('ad-other-charge-row');
+            if (otherChargesRow) {
+              otherChargesRow.style.setProperty('display', 'none', 'important');
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching AD charges:', error);
+          window.fetchedADChargeSummary = null;
+          container.innerHTML = '';
+        });
+    }
+
     function getConfiguredChargeSummary(subtotal = 0) {
         const charges = Array.isArray(window.activeOtherCharges) ? window.activeOtherCharges : [];
         const applicableCharges = charges.filter(charge => (
@@ -2840,31 +3012,64 @@
             chargeBelongsToSelectedAD(charge) &&
             getChargeAmount(charge, subtotal) > 0
         ));
+        const chargeItems = applicableCharges.filter(charge => !chargeIsDiscount(charge));
+        const discountItems = applicableCharges.filter(charge => chargeIsDiscount(charge));
 
         if (!applicableCharges.length) {
             return {
                 amount: 0,
+                chargesTotal: 0,
+                discountTotal: 0,
                 title: 'AD Other Charges',
                 description: 'Applied by the assigned Area Distributor',
-                items: []
+                items: [],
+                chargeItems: [],
+                discountItems: []
             };
         }
 
-        const amount = applicableCharges.reduce((sum, charge) => sum + getChargeAmount(charge, subtotal), 0);
-        const firstCharge = applicableCharges[0];
+        const chargesTotal = chargeItems.reduce((sum, charge) => sum + getChargeAmount(charge, subtotal), 0);
+        const discountTotal = discountItems.reduce((sum, charge) => sum + getChargeAmount(charge, subtotal), 0);
+        const amount = chargesTotal - discountTotal;
+        const firstCharge = chargeItems[0] || applicableCharges[0];
 
         return {
             amount,
-            title: applicableCharges.length === 1
+            chargesTotal,
+            discountTotal,
+            title: chargeItems.length === 1
                 ? getChargeName(firstCharge)
-                : `Other Charges (${applicableCharges.length})`,
-            description: applicableCharges.length === 1
+                : `AD Other Charges (${chargeItems.length})`,
+            description: chargeItems.length === 1
                 ? getChargeDescription(firstCharge)
-                : 'Active dealer charges applied to this order.',
-            items: applicableCharges.map(charge => ({
+                : discountTotal > 0
+                    ? 'AD charges and discount applied by the assigned Area Distributor.'
+                    : 'Active dealer charges applied to this order.',
+            items: [
+              ...chargeItems.map(charge => ({
                 name: getChargeName(charge),
                 description: getChargeDescription(charge),
-                amount: getChargeAmount(charge, subtotal)
+                amount: getChargeAmount(charge, subtotal),
+                type: 'charge'
+              })),
+              ...discountItems.map(charge => ({
+                name: getChargeName(charge),
+                description: getChargeDescription(charge),
+                amount: -getChargeAmount(charge, subtotal),
+                type: 'discount'
+              }))
+            ],
+            chargeItems: chargeItems.map(charge => ({
+                name: getChargeName(charge),
+                description: getChargeDescription(charge),
+                amount: getChargeAmount(charge, subtotal),
+                type: 'charge'
+            })),
+            discountItems: discountItems.map(charge => ({
+                name: getChargeName(charge),
+                description: getChargeDescription(charge),
+                amount: getChargeAmount(charge, subtotal),
+                type: 'discount'
             }))
         };
     }
@@ -2875,10 +3080,21 @@
         if (transactionType !== 'ad_order') {
             return {
                 amount: 0,
+                chargesTotal: 0,
+                discountTotal: 0,
                 title: 'AD Other Charges',
                 description: 'Applied by the assigned Area Distributor',
-                items: []
+                items: [],
+                chargeItems: [],
+                discountItems: []
             };
+        }
+
+        if (
+            window.selectedAD?.id &&
+            window.fetchedADChargeSummary?.adId === String(window.selectedAD.id)
+        ) {
+            return window.fetchedADChargeSummary;
         }
 
         return getConfiguredChargeSummary(subtotal);

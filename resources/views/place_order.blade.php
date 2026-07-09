@@ -103,21 +103,37 @@
       background: #f8fbff;
     }
 
-    .other-charges-row .info-label {
+    .discount-summary-row {
+      background: #f0fdf4;
+      border-top: 1px solid #dcfce7;
+      border-bottom: 1px solid #dcfce7;
+    }
+
+    .other-charges-row .info-label,
+    .discount-summary-row .info-label {
       display: flex;
       flex-direction: column;
       gap: 2px;
     }
 
-    .other-charges-title {
+    .other-charges-title,
+    .discount-title {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      color: #1d4ed8;
       font-weight: 700;
     }
 
-    .other-charges-row small {
+    .other-charges-title {
+      color: #1d4ed8;
+    }
+
+    .discount-title {
+      color: #15803d;
+    }
+
+    .other-charges-row small,
+    .discount-summary-row small {
       color: #64748b;
       font-size: 11px;
       line-height: 1.35;
@@ -143,6 +159,12 @@
     .charge-item-name {
       color: #374151;
       font-weight: 500;
+    }
+
+    .discount-item .charge-item-name,
+    .discount-item .charge-item-amount,
+    #ad-discount {
+      color: #15803d !important;
     }
 
     .charge-item-amount {
@@ -454,7 +476,7 @@
       <div class="section-content p-3">
         <div class="info-row d-flex justify-content-between align-items-center py-2 border-bottom">
           <span class="info-label">Payment Method:</span>
-          <span class="info-value fw-semibold" id="payment-method">Cash on hand</span>
+          <span class="info-value fw-semibold" id="payment-method">Cash on Delivery</span>
         </div>
         <div class="info-row d-flex justify-content-between align-items-center py-2 border-bottom">
           <span class="info-label">Delivery Method:</span>
@@ -463,6 +485,17 @@
         <div class="info-row d-flex justify-content-between align-items-center py-2 border-bottom">
           <span class="info-label">Total Items:</span>
           <span class="info-value fw-semibold" id="total-items">0</span>
+        </div>
+        <div id="ad-discount-row" class="info-row discount-summary-row d-flex justify-content-between align-items-start py-2 border-bottom" style="display:none !important;">
+          <span class="info-label">
+            <span class="discount-title">
+              <i class="bi bi-tag-fill"></i>
+              <span>AD Discount</span>
+            </span>
+            <small>Applied by the assigned Area Distributor</small>
+            <div id="discount-items-list" style="margin-top: 8px;"></div>
+          </span>
+          <span class="info-value fw-semibold" id="ad-discount">-₱ 0.00</span>
         </div>
         <div id="other-charges-row" class="info-row other-charges-row d-flex justify-content-between align-items-start py-2 border-bottom" style="display:block !important;">
           <span class="info-label">
@@ -499,7 +532,7 @@
               <i class="bi bi-cash-coin"></i>
             </div>
             <div class="payment-details flex-grow-1">
-              <div class="payment-name fw-semibold">Cash on hand</div>
+              <div class="payment-name fw-semibold">Cash on Delivery</div>
               <div class="payment-desc small text-muted">Customer pays upon delivery</div>
             </div>
           </div>
@@ -827,9 +860,18 @@
       const otherCharges = isADOrder
         ? parseMoney(orderData.delivery_fee || orderData.other_charges || 0)
         : 0;
+      const adChargeTotal = isADOrder
+        ? parseMoney(orderData.ad_charge_total ?? orderData.other_charges ?? 0)
+        : 0;
+      const discountTotal = isADOrder
+        ? parseMoney(orderData.discount_total || 0)
+        : 0;
       const totalAmount = subtotalAmount + otherCharges;
 
       document.getElementById('total-items').textContent = totalItems;
+      const discountRow = document.getElementById('ad-discount-row');
+      const discountElement = document.getElementById('ad-discount');
+      const discountItemsList = document.getElementById('discount-items-list');
       const otherChargesRow = document.getElementById('other-charges-row');
       const otherChargesElement = document.getElementById('other-charges');
       const otherChargesTitle = document.getElementById('other-charges-title');
@@ -844,7 +886,19 @@
         } else {
           otherChargesRow.style.setProperty('display', otherCharges > 0 ? 'flex' : 'none', 'important');
         }
-        otherChargesElement.textContent = '₱ ' + otherCharges.toFixed(2);
+        otherChargesElement.textContent = '₱ ' + adChargeTotal.toFixed(2);
+      }
+      if (discountRow) {
+        discountRow.style.setProperty('display', discountTotal > 0 ? 'flex' : 'none', 'important');
+      }
+      if (discountElement) {
+        discountElement.textContent = '-₱ ' + discountTotal.toFixed(2);
+      }
+      if (discountItemsList) {
+        displayDiscountItems(orderData.discount_items || [], discountItemsList);
+      }
+      if (otherChargesRow && isADOrder && adChargeTotal <= 0 && discountTotal > 0) {
+        otherChargesRow.style.setProperty('display', 'none', 'important');
       }
       if (otherChargesTitle) {
         otherChargesTitle.textContent = orderData.other_charge_label || 'AD Other Charges';
@@ -854,8 +908,10 @@
       }
 
       // Display charge items if available from localStorage first
-      if (otherChargesItemsList && orderData.other_charge_items && orderData.other_charge_items.length > 0) {
-        displayChargeItems(orderData.other_charge_items, otherChargesItemsList);
+      const chargeOnlyItems = orderData.other_charge_only_items
+        || (orderData.other_charge_items || []).filter(item => !chargeItemIsDiscount(item));
+      if (otherChargesItemsList && chargeOnlyItems.length > 0) {
+        displayChargeItems(chargeOnlyItems, otherChargesItemsList);
       } else if (isADOrder && window.authDealerType === 'regular' && adData?.id) {
         // Otherwise fetch from database (only for regular dealers on AD orders)
         fetchAndDisplayADCharges(adData.id, otherChargesItemsList, otherChargesElement, subtotalAmount);
@@ -877,6 +933,22 @@
       orderData.order_id = orderId;
     }
 
+    function escapeHTML(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function chargeItemIsDiscount(chargeItem) {
+      const type = String(chargeItem?.type ?? chargeItem?.charge_type ?? '').toLowerCase();
+      const name = String(chargeItem?.name ?? chargeItem?.charge_name ?? '').toLowerCase();
+
+      return type.includes('discount') || name.includes('discount') || parseMoney(chargeItem?.amount) < 0;
+    }
+
     function displayChargeItems(chargeItems, container) {
       if (!container || !chargeItems || chargeItems.length === 0) {
         if (container) container.innerHTML = '';
@@ -885,14 +957,24 @@
 
       let chargeItemsHTML = '';
       chargeItems.forEach(chargeItem => {
+        const isDiscount = chargeItemIsDiscount(chargeItem);
+        const amount = Math.abs(parseMoney(chargeItem.amount || 0));
         chargeItemsHTML += `
-          <div class="charge-item">
-            <span class="charge-item-name">${chargeItem.name || 'Charge'}</span>
-            <span class="charge-item-amount">₱ ${parseFloat(chargeItem.amount || 0).toFixed(2)}</span>
+          <div class="charge-item ${isDiscount ? 'discount-item' : ''}">
+            <span class="charge-item-name">${escapeHTML(chargeItem.name || (isDiscount ? 'AD Discount' : 'Charge'))}</span>
+            <span class="charge-item-amount">${isDiscount ? '-' : ''}₱ ${amount.toFixed(2)}</span>
           </div>
         `;
       });
       container.innerHTML = chargeItemsHTML;
+    }
+
+    function displayDiscountItems(discountItems, container) {
+      displayChargeItems((discountItems || []).map(item => ({
+        ...item,
+        type: 'discount',
+        amount: Math.abs(parseMoney(item.amount || 0))
+      })), container);
     }
 
     function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
@@ -922,6 +1004,78 @@
             console.log('No charges found for AD:', adId);
             container.innerHTML = '';
             // Hide the row if no charges
+            const otherChargesRow = document.getElementById('other-charges-row');
+            if (otherChargesRow) {
+              otherChargesRow.style.setProperty('display', 'none', 'important');
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching AD charges:', error);
+          container.innerHTML = '';
+        });
+    }
+
+    function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
+      if (!adId || !container) return;
+
+      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+        .then(response => response.json())
+        .then(data => {
+          const fetchedCharges = data.charges || [];
+          const fetchedDiscounts = data.discounts || [];
+
+          if (data.success && (fetchedCharges.length > 0 || fetchedDiscounts.length > 0)) {
+            const chargesTotal = parseMoney(data.charges_total ?? data.total);
+            const discountTotal = parseMoney(data.discount_total);
+            const netAdjustment = parseMoney(data.total);
+
+            displayChargeItems(fetchedCharges, container);
+
+            if (chargesElement) {
+              chargesElement.textContent = '₱ ' + chargesTotal.toFixed(2);
+            }
+
+            const otherChargesRow = document.getElementById('other-charges-row');
+            if (otherChargesRow) {
+              otherChargesRow.style.setProperty('display', chargesTotal > 0 ? 'flex' : 'none', 'important');
+            }
+
+            const discountRow = document.getElementById('ad-discount-row');
+            const discountElement = document.getElementById('ad-discount');
+            const discountItemsList = document.getElementById('discount-items-list');
+            if (discountRow) {
+              discountRow.style.setProperty('display', discountTotal > 0 ? 'flex' : 'none', 'important');
+            }
+            if (discountElement) discountElement.textContent = '-₱ ' + discountTotal.toFixed(2);
+            if (discountItemsList) displayDiscountItems(fetchedDiscounts, discountItemsList);
+
+            const newTotal = subtotalAmount + netAdjustment;
+            document.getElementById('order-total').textContent = '₱ ' + newTotal.toFixed(2);
+
+            orderData.delivery_fee = netAdjustment;
+            orderData.other_charges = netAdjustment;
+            orderData.ad_charge_total = chargesTotal;
+            orderData.discount_total = discountTotal;
+            orderData.other_charge_items = [
+              ...fetchedCharges,
+              ...fetchedDiscounts.map(item => ({
+                ...item,
+                type: 'discount',
+                amount: -Math.abs(parseMoney(item.amount || 0))
+              }))
+            ];
+            orderData.other_charge_only_items = fetchedCharges;
+            orderData.discount_items = fetchedDiscounts;
+            orderData.total_amount = newTotal;
+          } else {
+            container.innerHTML = '';
+
+            const discountRow = document.getElementById('ad-discount-row');
+            const discountItemsList = document.getElementById('discount-items-list');
+            if (discountRow) discountRow.style.setProperty('display', 'none', 'important');
+            if (discountItemsList) discountItemsList.innerHTML = '';
+
             const otherChargesRow = document.getElementById('other-charges-row');
             if (otherChargesRow) {
               otherChargesRow.style.setProperty('display', 'none', 'important');
@@ -1002,11 +1156,11 @@
             <i class="bi bi-cash-coin"></i>
           </div>
           <div class="payment-details flex-grow-1">
-            <div class="payment-name fw-semibold">Cash on Hand</div>
+            <div class="payment-name fw-semibold">Cash on Delivery</div>
             <div class="payment-desc small text-muted">Customer pays upon delivery</div>
           </div>
         `;
-        paymentMethodText.textContent = 'Cash on Hand';
+        paymentMethodText.textContent = 'Cash on Delivery';
       }
     }
 
