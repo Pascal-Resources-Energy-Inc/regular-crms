@@ -55,6 +55,7 @@ Route::get('/products', 'ProductController@index')->name('products.index');
 Route::get('/products/stocks', 'ProductController@stockSummary')->name('products.stocks');
 Route::get('/stock-inventory', 'ProductController@dealerStockInventory')->name('dealer.stock.inventory');
 Route::get('/stock-inventory/{product}/transactions', 'ProductController@dealerStockTransactions')->name('dealer.stock.transactions');
+Route::post('/stock-requests', 'DealerStockRequestController@store')->name('dealer.stock.requests.store');
 
 Route::get('/about', 'HomeController@about')->name('about');
 

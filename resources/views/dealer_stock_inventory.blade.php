@@ -16,6 +16,12 @@
     </div>
 
     <div class="inventory-shell">
+        @if(session('success'))
+            <div class="inventory-notice success"><i class="bi bi-check-circle"></i>{{ session('success') }}</div>
+        @endif
+        @if($errors->any())
+            <div class="inventory-notice error"><i class="bi bi-exclamation-circle"></i>{{ $errors->first() }}</div>
+        @endif
         <div class="summary-grid">
             <div class="summary-card units-card">
                 <div class="summary-icon units"><i class="bi bi-box-seam"></i></div>
@@ -63,7 +69,7 @@
                     <div class="product-media">
                         <img
                             src="{{ $item['image'] }}"
-                            onerror="this.src='{{ asset('images/no-image.png') }}'"
+                            onerror="this.onerror=null; this.src='{{ asset('images/white_image.png') }}'"
                             alt="{{ $item['name'] }}"
                         >
                     </div>
@@ -81,12 +87,6 @@
                             {{ $item['description'] ?: 'No description available' }}
                         </div>
 
-                        <div class="stock-meter {{ $item['status'] }}" aria-label="Dealer stock level">
-                            @php
-                                $meterWidth = min(100, max(0, $item['dealer_stock'] * 10));
-                            @endphp
-                            <div style="width: {{ $meterWidth }}%;"></div>
-                        </div>
                     </div>
 
                     <div class="stock-numbers">
@@ -111,6 +111,9 @@
                             <span>View Transactions</span>
                             <i class="bi bi-arrow-right-short"></i>
                         </a>
+                        @if(auth()->user()->role === 'Dealer' && strtolower(optional(auth()->user()->dealer)->dealer_type) === 'regular' && $item['dealer_stock'] <= 0)
+                            <button type="button" class="add-stock-link" data-stock-product="{{ $item['id'] }}" data-stock-name="{{ $item['name'] }}"><i class="bi bi-plus-circle"></i><span>Request item stock</span></button>
+                        @endif
                     </div>
                 </article>
             @empty
@@ -129,6 +132,9 @@
         </div>
     </div>
 </div>
+@if(auth()->user()->role === 'Dealer' && strtolower(optional(auth()->user()->dealer)->dealer_type) === 'regular')
+<div class="stock-modal" id="stockRequestModal" aria-hidden="true"><div class="stock-modal-backdrop" data-close-stock-modal></div><div class="stock-modal-dialog"><button type="button" class="stock-modal-close" data-close-stock-modal aria-label="Close"><i class="bi bi-x-lg"></i></button><div class="stock-modal-icon"><i class="bi bi-box-seam"></i></div><p class="stock-modal-eyebrow">ADMIN APPROVAL REQUIRED</p><h2>Request item stock</h2><p class="stock-modal-copy">Request stock for <strong id="stockModalProduct">this item</strong>. It will be added only after approval.</p><form method="POST" action="{{ route('dealer.stock.requests.store') }}">@csrf<input type="hidden" name="product_id" id="stockModalProductId"><label>Quantity</label><div class="stock-modal-quantity"><button type="button" data-stock-step="-1">&#8722;</button><input type="number" name="quantity" id="stockModalQuantity" min="1" value="1" required><button type="button" data-stock-step="1">+</button></div><label>Note <span>Optional</span></label><textarea name="notes" rows="3" maxlength="1000" placeholder="Add delivery or stock details"></textarea><button type="submit" class="stock-modal-submit"><i class="bi bi-send"></i> Submit request</button></form></div></div>
+@endif
 @endsection
 
 @section('css')
@@ -137,6 +143,11 @@
         background: #eef4f8;
         padding-top: 0 !important;
     }
+
+    .inventory-notice { margin-bottom: 16px; padding: 13px 16px; border-radius: 10px; font-size: 13px; font-weight: 700; }
+    .inventory-notice i { margin-right: 8px; }
+    .inventory-notice.success { background: #e8f8ee; color: #176a39; }
+    .inventory-notice.error { background: #ffeded; color: #a52b2b; }
 
     .inventory-page {
         min-height: 100vh;
@@ -479,33 +490,6 @@
         color: #b42318;
     }
 
-    .stock-meter {
-        height: 7px;
-        width: 100%;
-        background: #edf2f7;
-        border-radius: 99px;
-        overflow: hidden;
-        margin-top: 12px;
-    }
-
-    .stock-meter div {
-        height: 100%;
-        background: #1688b3;
-        border-radius: inherit;
-    }
-
-    .stock-meter.healthy div {
-        background: #16834a;
-    }
-
-    .stock-meter.low div {
-        background: #c2410c;
-    }
-
-    .stock-meter.out div {
-        background: #b42318;
-    }
-
     .stock-numbers {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -554,6 +538,26 @@
         box-shadow: 0 10px 22px rgba(22, 136, 179, 0.22);
         transform: translateY(-1px);
     }
+
+    .add-stock-link { grid-column: 1 / -1; min-height: 42px; border: 1px solid #1688b3; border-radius: 8px; color: #1688b3; background: #f0fbff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+    .add-stock-link:hover { color: #0f7298; border-color: #0f7298; background: #e0f5fb; }
+    .stock-modal { display:none; position:fixed; inset:0; z-index:1000; align-items:center; justify-content:center; padding:18px; }
+    .stock-modal.is-open { display:flex; }
+    .stock-modal-backdrop { position:absolute; inset:0; background:rgba(15,32,51,.62); backdrop-filter:blur(3px); }
+    .stock-modal-dialog { position:relative; width:min(100%,460px); padding:28px; border-radius:18px; background:#fff; box-shadow:0 24px 70px rgba(15,32,51,.28); }
+    .stock-modal-close { position:absolute; top:14px; right:14px; width:34px; height:34px; border:0; border-radius:50%; background:#f1f5f8; color:#667085; cursor:pointer; }
+    .stock-modal-icon { width:48px; height:48px; border-radius:14px; display:grid; place-items:center; background:#e6f8fc; color:#078db2; font-size:23px; }
+    .stock-modal-eyebrow { margin:18px 0 5px; color:#078db2; font-size:11px; letter-spacing:.1em; font-weight:800; }
+    .stock-modal-dialog h2 { margin:0; color:#152238; font-size:24px; }
+    .stock-modal-copy { margin:8px 0 20px; color:#667085; font-size:14px; line-height:1.55; }
+    .stock-modal-dialog label { display:block; margin:15px 0 7px; color:#344054; font-size:13px; font-weight:800; }
+    .stock-modal-dialog label span { color:#98a2b3; font-weight:500; }
+    .stock-modal-dialog textarea { width:100%; resize:vertical; border:1px solid #d0dbe5; border-radius:9px; padding:11px; outline:0; }
+    .stock-modal-quantity { display:flex; width:155px; overflow:hidden; border:1px solid #d0dbe5; border-radius:9px; }
+    .stock-modal-quantity button { width:42px; border:0; background:#eefafd; color:#078db2; font-size:21px; cursor:pointer; }
+    .stock-modal-quantity input { width:71px; border:0; text-align:center; font-weight:800; outline:0; }
+    .stock-modal-submit { width:100%; margin-top:21px; padding:13px; border:0; border-radius:9px; background:#078db2; color:#fff; font-size:14px; font-weight:800; cursor:pointer; }
+    body.stock-modal-open { overflow:hidden; }
 
     .inventory-empty {
         text-align: center;
@@ -702,5 +706,18 @@
     document.getElementById('refreshInventory')?.addEventListener('click', () => {
         window.location.reload();
     });
+
+    const stockModal = document.getElementById('stockRequestModal');
+    const stockProductId = document.getElementById('stockModalProductId');
+    const stockProductName = document.getElementById('stockModalProduct');
+    const stockQuantity = document.getElementById('stockModalQuantity');
+    function closeStockModal() { stockModal?.classList.remove('is-open'); document.body.classList.remove('stock-modal-open'); }
+    document.querySelectorAll('[data-stock-product]').forEach((button) => button.addEventListener('click', () => {
+        stockProductId.value = button.dataset.stockProduct; stockProductName.textContent = button.dataset.stockName; stockQuantity.value = 1;
+        stockModal.classList.add('is-open'); document.body.classList.add('stock-modal-open'); stockQuantity.focus();
+    }));
+    document.querySelectorAll('[data-close-stock-modal]').forEach((button) => button.addEventListener('click', closeStockModal));
+    document.querySelectorAll('[data-stock-step]').forEach((button) => button.addEventListener('click', () => { stockQuantity.value = Math.max(1, Number(stockQuantity.value || 1) + Number(button.dataset.stockStep)); }));
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeStockModal(); });
 </script>
 @endsection
