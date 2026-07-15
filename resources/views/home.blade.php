@@ -731,10 +731,10 @@
                                                     </span>
                                                 @endif
 
-                                                @if($otherCharges > 0)
+                                                @if($otherCharges != 0)
                                                     <span class="badge bg-light text-info border px-3 py-2 rounded-pill">
                                                         <i class="bi bi-receipt-cutoff me-1"></i>
-                                                        AD Charges ₱{{ number_format($otherCharges, 2) }}
+                                                        AD {{ $otherCharges < 0 ? 'Discount' : 'Charges' }} {{ $otherCharges < 0 ? '-' : '+' }}₱{{ number_format(abs($otherCharges), 2) }}
                                                     </span>
                                                 @endif
 
@@ -780,12 +780,12 @@
                                                 </div>
                                             @endif
 
-                                            @if($otherCharges > 0)
+                                            @if($otherCharges != 0)
                                                 <div class="d-flex justify-content-between gap-3 small text-muted mt-1">
                                                     <span>
                                                         <i class="bi bi-receipt-cutoff text-info me-1"></i>AD Charges
                                                     </span>
-                                                    <span class="fw-semibold text-info">+₱{{ number_format($otherCharges, 2) }}</span>
+                                                    <span class="fw-semibold text-info">{{ $otherCharges < 0 ? '-' : '+' }}₱{{ number_format(abs($otherCharges), 2) }}</span>
                                                 </div>
                                                 
                                                 <!-- Individual Charges -->
@@ -794,7 +794,7 @@
                                                         @foreach($transaction['charges'] as $charge)
                                                             <div class="d-flex justify-content-between gap-2 small" style="padding: 4px 0; font-size: 11px;">
                                                                 <span style="color: #64748b;">{{ $charge['name'] }}</span>
-                                                                <span style="color: #1d4ed8; font-weight: 600;">₱{{ number_format($charge['amount'], 2) }}</span>
+                                                                <span style="color: #1d4ed8; font-weight: 600;">{{ $charge['amount'] < 0 ? '-' : '+' }}₱{{ number_format(abs($charge['amount']), 2) }}</span>
                                                             </div>
                                                         @endforeach
                                                     </div>

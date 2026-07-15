@@ -634,16 +634,50 @@ class TransactionController extends Controller
     /**
      * Fetch charges for an Area Distributor
      */
-    public function getADCharges($adId)
+    public function getADCharges(Request $request, $adId)
     {
         try {
+            $ad = AreaDistributor::findOrFail($adId);
+            $adUserId = $ad->user_id;
+            $subtotal = max(0, (float) $request->query('subtotal', 0));
             $charges = collect();
 
             // Try to fetch from other_charges or charges table
             foreach (['other_charges', 'charges'] as $chargeTable) {
                 if (Schema::hasTable($chargeTable)) {
-                    $charges = DB::table($chargeTable)
-                        ->where('ad_id', $adId)
+                    $query = DB::table($chargeTable);
+
+                    // Charge records have used different AD columns over time.
+                    // Match every supported identifier so the selected AD's full
+                    // set of charges and discounts is returned.
+                    $adIdColumns = array_filter([
+                        'ad_id',
+                        'area_distributor_id',
+                        'area_distributor',
+                        'areaDistributorId',
+                    ], fn ($column) => Schema::hasColumn($chargeTable, $column));
+                    $adUserColumns = array_filter([
+                        'ad_user_id',
+                        'area_distributor_user_id',
+                        'user_id',
+                    ], fn ($column) => Schema::hasColumn($chargeTable, $column));
+
+                    if (empty($adIdColumns) && (empty($adUserColumns) || !$adUserId)) {
+                        continue;
+                    }
+
+                    $charges = $query
+                        ->where(function ($adQuery) use ($adIdColumns, $adUserColumns, $adId, $adUserId) {
+                            foreach ($adIdColumns as $column) {
+                                $adQuery->orWhere($column, $adId);
+                            }
+
+                            if ($adUserId) {
+                                foreach ($adUserColumns as $column) {
+                                    $adQuery->orWhere($column, $adUserId);
+                                }
+                            }
+                        })
                         ->when(Schema::hasColumn($chargeTable, 'deleted_at'), fn ($query) => $query->whereNull('deleted_at'))
                         ->when(Schema::hasColumn($chargeTable, 'status'), function ($query) {
                             $query->where(function ($statusQuery) {
@@ -656,7 +690,7 @@ class TransactionController extends Controller
                         })
                         ->when(Schema::hasColumn($chargeTable, 'is_active'), fn ($query) => $query->where('is_active', 1))
                         ->get()
-                        ->map(function ($charge) {
+                        ->map(function ($charge) use ($subtotal) {
                             $rawAmount = $charge->amount ?? $charge->charge_amount ?? $charge->value ?? $charge->price ?? 0;
                             $amount = is_numeric($rawAmount)
                                 ? (float) $rawAmount
@@ -673,13 +707,20 @@ class TransactionController extends Controller
                             $isDiscount = strpos($typeText, 'discount') !== false
                                 || strpos($nameText, 'discount') !== false
                                 || $amount < 0;
+                            $isPercentage = strpos($typeText, 'percent') !== false
+                                || strpos($typeText, 'percentage') !== false;
+                            $calculatedAmount = $isPercentage
+                                ? $subtotal * (abs($amount) / 100)
+                                : abs($amount);
 
                             return [
                                 'name' => $name ?? ($isDiscount ? 'AD Discount' : 'Charge'),
-                                'amount' => abs($amount),
+                                'amount' => round($calculatedAmount, 2),
                                 'description' => $charge->description ?? null,
                                 'type' => $isDiscount ? 'discount' : 'charge',
                                 'charge_type' => $typeText,
+                                'is_percentage' => $isPercentage,
+                                'rate' => $isPercentage ? abs($amount) : null,
                             ];
                         });
 

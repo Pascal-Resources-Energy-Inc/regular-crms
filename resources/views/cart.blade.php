@@ -2438,14 +2438,13 @@
             if (discountDescription) discountDescription.style.display = discountTotal > 0 ? 'block' : 'none';
             if (discountItemsList) displayDiscountItems(chargeSummary.discountItems || [], discountItemsList);
 
-            // Check if it's an AD order and regular dealer type
+            // Check whether this is an AD order.
             const transactionType = document.querySelector('input[name="transaction_type"]:checked')?.value;
             const isADOrder = transactionType === 'ad_order';
-            const isRegularDealer = window.authDealerType === 'regular';
             
             if (otherChargeRow && otherChargeElement) {
-                if (isADOrder && isRegularDealer) {
-                    // For AD orders with regular dealers, always show the row initially
+                if (isADOrder) {
+                    // Display the AD adjustment section while its current values load.
                     otherChargeRow.style.setProperty('display', 'flex', 'important');
                     
                     // Fetch charges from database if AD is selected
@@ -2888,7 +2887,7 @@
     function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
       if (!adId || !container) return;
 
-      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+      fetch(`{{ url('/api/ad-charges') }}/${adId}?subtotal=${encodeURIComponent(subtotalAmount || 0)}`)
         .then(response => response.json())
         .then(data => {
           if (data.success && data.charges && data.charges.length > 0) {
@@ -2906,6 +2905,10 @@
             if (totalFinalElement) {
               totalFinalElement.textContent = '₱ ' + newTotal.toFixed(2);
             }
+            const finalTotalElement = document.getElementById('final-total');
+            if (finalTotalElement && totalFinalElement) {
+              finalTotalElement.textContent = totalFinalElement.textContent;
+            }
           } else {
             console.log('No charges found for AD:', adId);
             container.innerHTML = '';
@@ -2913,6 +2916,15 @@
             const otherChargesRow = document.getElementById('ad-other-charge-row');
             if (otherChargesRow) {
               otherChargesRow.style.setProperty('display', 'none', 'important');
+            }
+            const totalFinalElement = document.getElementById('total-final');
+            const finalTotalElement = document.getElementById('final-total');
+            const subtotalElement = document.getElementById('subtotal');
+            if (subtotalElement && totalFinalElement) {
+              totalFinalElement.textContent = subtotalElement.textContent;
+            }
+            if (subtotalElement && finalTotalElement) {
+              finalTotalElement.textContent = subtotalElement.textContent;
             }
           }
         })
@@ -2925,7 +2937,7 @@
     function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
       if (!adId || !container) return;
 
-      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+      fetch(`{{ url('/api/ad-charges') }}/${adId}?subtotal=${encodeURIComponent(subtotalAmount || 0)}`)
         .then(response => response.json())
         .then(data => {
           const fetchedCharges = data.charges || [];
@@ -2985,6 +2997,10 @@
             if (totalFinalElement) {
               totalFinalElement.textContent = '₱ ' + (subtotalAmount + netAdjustment).toFixed(2);
             }
+            const finalTotalElement = document.getElementById('final-total');
+            if (finalTotalElement && totalFinalElement) {
+              finalTotalElement.textContent = totalFinalElement.textContent;
+            }
           } else {
             window.fetchedADChargeSummary = null;
             container.innerHTML = '';
@@ -2997,6 +3013,15 @@
             const otherChargesRow = document.getElementById('ad-other-charge-row');
             if (otherChargesRow) {
               otherChargesRow.style.setProperty('display', 'none', 'important');
+            }
+            const totalFinalElement = document.getElementById('total-final');
+            const finalTotalElement = document.getElementById('final-total');
+            const subtotalElement = document.getElementById('subtotal');
+            if (subtotalElement && totalFinalElement) {
+              totalFinalElement.textContent = subtotalElement.textContent;
+            }
+            if (subtotalElement && finalTotalElement) {
+              finalTotalElement.textContent = subtotalElement.textContent;
             }
           }
         })

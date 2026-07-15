@@ -156,7 +156,15 @@ class HomeController extends Controller
                         ];
                     })->toArray() : [];
                     
-                    $otherChargesTotal = collect($charges)->sum('amount');
+                    // Prefer the signed amount stored with the order. This
+                    // keeps AD charges in the transaction summary even where
+                    // individual charge rows are unavailable on older orders.
+                    $storedOtherCharges = Schema::hasColumn('order_details', 'other_charges')
+                        ? (float) ($first->other_charges ?? 0)
+                        : 0;
+                    $otherChargesTotal = $storedOtherCharges != 0
+                        ? $storedOtherCharges
+                        : (float) collect($charges)->sum('amount');
 
                     return [
                         'id' => $first->id, 

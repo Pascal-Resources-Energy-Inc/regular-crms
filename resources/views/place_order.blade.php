@@ -862,8 +862,10 @@
       const totalItems = dealerCartData.reduce((sum, item) => sum + item.quantity, 0);
       const subtotalAmount = dealerCartData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const isADOrder = orderData.transaction_type === 'ad_order';
+      // other_charges is the signed AD adjustment: charges are positive and
+      // discounts are negative. Do not let a delivery fee override it.
       const otherCharges = isADOrder
-        ? parseMoney(orderData.delivery_fee || orderData.other_charges || 0)
+        ? parseMoney(orderData.other_charges ?? orderData.delivery_fee ?? 0)
         : 0;
       const adChargeTotal = isADOrder
         ? parseMoney(orderData.ad_charge_total ?? orderData.other_charges ?? 0)
@@ -917,14 +919,18 @@
         || (orderData.other_charge_items || []).filter(item => !chargeItemIsDiscount(item));
       if (otherChargesItemsList && chargeOnlyItems.length > 0) {
         displayChargeItems(chargeOnlyItems, otherChargesItemsList);
-      } else if (isADOrder && window.authDealerType === 'regular' && adData?.id) {
-        // Otherwise fetch from database (only for regular dealers on AD orders)
+      }
+
+      // Refresh from the AD on the payment page. This ensures every current
+      // charge and discount is reflected even when the cart held older data.
+      if (isADOrder && adData?.id) {
         fetchAndDisplayADCharges(adData.id, otherChargesItemsList, otherChargesElement, subtotalAmount);
       }
 
       document.getElementById('order-total').textContent = '₱ ' + totalAmount.toFixed(2);
 
       orderData.total_amount = totalAmount;
+      orderData.total = totalAmount;
       // orderData.delivery_fee = otherCharges;
       orderData.other_charges = otherCharges;
 
@@ -985,7 +991,7 @@
     function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
       if (!adId || !container) return;
 
-      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+      fetch(`{{ url('/api/ad-charges') }}/${adId}?subtotal=${encodeURIComponent(subtotalAmount || 0)}`)
         .then(response => response.json())
         .then(data => {
           if (data.success && data.charges && data.charges.length > 0) {
@@ -1024,7 +1030,7 @@
     function fetchAndDisplayADCharges(adId, container, chargesElement, subtotalAmount) {
       if (!adId || !container) return;
 
-      fetch(`{{ url('/api/ad-charges') }}/${adId}`)
+      fetch(`{{ url('/api/ad-charges') }}/${adId}?subtotal=${encodeURIComponent(subtotalAmount || 0)}`)
         .then(response => response.json())
         .then(data => {
           const fetchedCharges = data.charges || [];
@@ -1058,7 +1064,10 @@
             const newTotal = subtotalAmount + netAdjustment;
             document.getElementById('order-total').textContent = '₱ ' + newTotal.toFixed(2);
 
-            orderData.delivery_fee = netAdjustment;
+            // AD charges/discounts are a signed adjustment, not a delivery fee.
+            // Keeping this at zero prevents a net discount from failing the
+            // server's non-negative delivery_fee validation.
+            orderData.delivery_fee = 0;
             orderData.other_charges = netAdjustment;
             orderData.ad_charge_total = chargesTotal;
             orderData.discount_total = discountTotal;
@@ -1417,7 +1426,7 @@
 
                   formData.append('payment_method', orderData.payment_method || 'cash');
                   formData.append('delivery_type', orderData.delivery_type || 'pickup');
-                  formData.append('delivery_fee', orderData.delivery_fee || 0);
+                  formData.append('delivery_fee', Math.max(0, parseMoney(orderData.delivery_fee)));
                   formData.append('other_charges', orderData.other_charges || 0);
                   
                   // Store individual charge items as JSON
