@@ -1368,9 +1368,9 @@
             return [];
         }
 
-        return Array.from(customerSelector.options)
+        return ['guest', 'others'].concat(Array.from(customerSelector.options)
             .map(option => option.value)
-            .filter(Boolean);
+            .filter(Boolean));
     }
 
     function clearSelectedCustomer() {
@@ -1711,7 +1711,10 @@
         
         if (!customerDropdown) {
             const customerSelector = document.getElementById('customerSelector');
-            const customers = [];
+            const customers = [
+                { id: 'guest', name: 'Guest', fullName: 'Guest', serial: '', number: '', maskedSerial: '', maskedNumber: 'No points awarded' },
+                // { id: 'others', name: 'Others', fullName: 'Others', serial: '', number: '', maskedSerial: '', maskedNumber: 'No points awarded' }
+            ];
             
             if (customerSelector) {
                 Array.from(customerSelector.options).forEach(option => {

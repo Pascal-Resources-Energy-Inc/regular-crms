@@ -93,16 +93,27 @@ class TransactionController extends Controller
                 // 'item_id' => 'required|exists:items,id',
                 'item_id' => 'required|exists:products,id',
                 'qty' => 'required|integer|min:1',
-                'customer_id' => 'required|exists:clients,id',
+                'customer_id' => 'nullable|exists:clients,id',
+                'client_tag' => 'nullable|string|in:guest,others',
                 'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
                 'delivery_type' => 'nullable|string|in:pickup,delivery',
             ]);
 
+            $isNonMemberTransaction = in_array($request->client_tag, ['guest', 'others'], true);
+
+            if (!$isNonMemberTransaction && !$request->customer_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'customer_id' => ['Please select a client, Guest, or Others.'],
+                ]);
+            }
+
             // $item = Item::findOrFail($request->item_id);
             $item = Product::findOrFail($request->item_id);
-            $client = Client::with('user')->findOrFail($request->customer_id);
+            $client = $isNonMemberTransaction
+                ? null
+                : Client::with('user')->findOrFail($request->customer_id);
 
-            if ((int) $client->dealer_id !== (int) auth()->id()) {
+            if ($client && (int) $client->dealer_id !== (int) auth()->id()) {
                 $message = 'Selected client is not assigned to your dealer account.';
 
                 if ($request->expectsJson() || $request->ajax()) {
@@ -122,12 +133,13 @@ class TransactionController extends Controller
             $transaction = new TransactionDetail;
             $transaction->transaction_id = 'TRX-' . time() . '-' . rand(1000, 9999);
             $transaction->item = $item->product_name;
-            $transaction->points_dealer = $item->dealer_points * $request->qty;
-            $transaction->points_client = $item->customer_points * $request->qty;
+            $transaction->points_dealer = $isNonMemberTransaction ? 0 : $item->dealer_points * $request->qty;
+            $transaction->points_client = $isNonMemberTransaction ? 0 : $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
             $transaction->price = $this->getProductPriceForUser($item);
-            $transaction->client_id = $request->customer_id;
+            $transaction->client_id = $isNonMemberTransaction ? null : $request->customer_id;
+            $transaction->client_tag = $isNonMemberTransaction ? $request->client_tag : null;
             $transaction->client_address = $client->address ?? '';
             $transaction->date = date('Y-m-d');
             $transaction->dealer_id = auth()->user()->id;

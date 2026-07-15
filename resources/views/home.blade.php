@@ -468,14 +468,14 @@
                                                             <div class="flex-shrink-0 me-3">
                                                                 <div class="avatar-circle" style="width: 55px; height: 55px;">
                                                                     <img src="{{ optional($transaction->customer)->avatar ? asset($transaction->customer->avatar) : asset('design/assets/images/profile/user-1.png') }}" 
-                                                                        alt="{{ optional($transaction->customer)->name ?? 'Customer' }}"
+                                                                        alt="{{ ucfirst($transaction->client_tag ?: (optional($transaction->customer)->name ?? 'Customer')) }}"
                                                                         class="rounded-circle w-100 h-100 object-fit-cover"
                                                                         style="border: 2px solid #e2e8f0;">
                                                                 </div>
                                                             </div>
                                                             <div class="flex-grow-1">
                                                                 <h6 class="mb-0 fw-bold text-dark">
-                                                                    {{ strtoupper($transaction->customer->name ?? 'Unknown Customer') }}
+                                                                    {{ strtoupper($transaction->client_tag ?: ($transaction->customer->name ?? 'Unknown Customer')) }}
                                                                 </h6>
                                                                 <div class="d-flex align-items-center gap-2">
                                                                     <small class="text-muted">{{ date('m/d/Y', strtotime($transaction->created_at)) }}</small>
@@ -607,7 +607,7 @@
                                             style="width:50px;height:50px;object-fit:cover;">
                                         <div>
                                             <div class="fw-semibold client-transaction-name">
-                                                {{ strtoupper($transaction->customer->name ?? 'Unknown') }}
+                                                {{ strtoupper($transaction->client_tag ?: ($transaction->customer->name ?? 'Unknown')) }}
                                             </div>
 
                                             <small class="text-muted">

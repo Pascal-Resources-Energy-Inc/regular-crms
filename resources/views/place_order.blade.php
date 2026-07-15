@@ -804,6 +804,11 @@
 
         nameDisplay.textContent = customer.name || 'Selected Customer';
 
+        if (['guest', 'others'].includes(String(customer.id))) {
+            detailsDisplay.textContent = 'No points will be awarded for this transaction.';
+            return;
+        }
+
         let details = [];
         if (customer.serial) details.push(`Serial: ${customer.serial}`);
         if (customer.number) details.push(`Number: ${customer.number}`);
@@ -1349,6 +1354,9 @@
           const customerId = !isADOrder
               ? (customerData?.id || localStorage.getItem('selectedCustomerId'))
               : null;
+          const clientTag = !isADOrder && ['guest', 'others'].includes(String(customerId))
+              ? String(customerId)
+              : null;
 
           const adId = isADOrder
               ? (adData?.id)
@@ -1400,7 +1408,11 @@
                   if (isADOrder) {
                       formData.append('area_distributor_id', adId);
                   } else {
-                      formData.append('customer_id', customerId);
+                      if (clientTag) {
+                          formData.append('client_tag', clientTag);
+                      } else {
+                          formData.append('customer_id', customerId);
+                      }
                   }
 
                   formData.append('payment_method', orderData.payment_method || 'cash');

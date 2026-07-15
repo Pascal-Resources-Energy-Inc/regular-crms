@@ -42,7 +42,7 @@
             <div class="transaction-card d-flex justify-content-between align-items-start">
               <div class="transaction-details flex-grow-1">
                 <div class="transaction-name">
-                  {{ strtoupper($transaction->customer->name ?? 'Unknown Customer') }}
+                  {{ strtoupper($transaction->client_tag ?: ($transaction->customer->name ?? 'Unknown Customer')) }}
                 </div>
                 <div class="transaction-info">
                   {{ \Carbon\Carbon::parse($transaction->created_at)->format('g:i A') }} - 
@@ -152,9 +152,9 @@
           'points_client' => $t->points_client,
           'payment_method' => $t->payment_method ?? 'Cash',
           'status' => $t->status ?? 'Paid',
-          'customer_name' => $t->customer->name ?? 'Unknown Customer',
+          'customer_name' => ucfirst($t->client_tag ?: ($t->customer->name ?? 'Unknown Customer')),
           'dealer_name' => $t->dealer->name ?? 'N/A',
-          'client_name' => $t->client->name ?? 'N/A',
+          'client_name' => ucfirst($t->client_tag ?: ($t->client->name ?? 'N/A')),
           'created_at' => \Carbon\Carbon::parse($t->created_at)->format('F j, Y g:i A'),
           'updated_at' => \Carbon\Carbon::parse($t->updated_at)->format('F j, Y g:i A'),
         ];

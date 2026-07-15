@@ -281,7 +281,7 @@ table.dataTable {
                                       <td>{{ number_format($transaction->qty, 2) }}</td>
                                       <td>{{ number_format($transaction->qty * $transaction->price, 2) }}</td>
                                       <td>{{ $transaction->dealer->name ?? '' }}</td>
-                                      <td>{{ $transaction->customer->name ?? '' }}</td>
+                                      <td>{{ ucfirst($transaction->client_tag ?: ($transaction->customer->name ?? '')) }}</td>
                                       <td><span class='text-success'>{{ $transaction->points_dealer }}</span></td>
                                       <td><span class='text-success'>{{ $transaction->points_client }}</span></td>
                                       <td>{{ strtoupper($transaction->item) }}</td>
